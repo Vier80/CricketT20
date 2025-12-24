@@ -231,11 +231,17 @@
                                     <div key={m.id} className="match-card rounded-[2.5rem] p-2 flex items-center justify-between shadow-lg">
                                         <div onClick={()=>onPick(m.id, m.team1.id)} className={`flex-1 flex items-center gap-3 p-4 rounded-[2rem] cursor-pointer transition-all ${predictions[m.id] === m.team1.id ? 'selected-winner' : 'hover:bg-white/5'}`}>
                                             <Flag id={m.team1.id} size="h-7"/> 
-                                            <span className="team-label flex-1 text-left">{m.team1.name}</span>
+                                            <div className="flex flex-col text-left">
+                                                <span className="team-label">{m.team1.name}</span>
+                                                <span className="text-[8px] font-black text-orange-500 uppercase tracking-widest">Rank #{m.team1.rank}</span>
+                                            </div>
                                         </div>
                                         <div className="px-2 font-black text-slate-700 text-[9px] italic">VS</div>
                                         <div onClick={()=>onPick(m.id, m.team2.id)} className={`flex-1 flex items-center justify-end gap-3 p-4 rounded-[2rem] text-right cursor-pointer transition-all ${predictions[m.id] === m.team2.id ? 'selected-winner' : 'hover:bg-white/5'}`}>
-                                            <span className="team-label flex-1 text-right">{m.team2.name}</span>
+                                            <div className="flex flex-col text-right">
+                                                <span className="team-label">{m.team2.name}</span>
+                                                <span className="text-[8px] font-black text-orange-500 uppercase tracking-widest">Rank #{m.team2.rank}</span>
+                                            </div>
                                             <Flag id={m.team2.id} size="h-7"/>
                                         </div>
                                     </div>
@@ -270,7 +276,10 @@
                                         <div className="flex items-center gap-4">
                                             <span className="font-black text-slate-500 text-lg italic w-6">{idx+1}</span>
                                             <Flag id={t.id} size="h-6"/>
-                                            <span className="font-black text-sm uppercase text-slate-200">{t.name}</span>
+                                            <div className="flex flex-col text-left">
+                                                <span className="font-black text-sm uppercase text-slate-200">{t.name}</span>
+                                                <span className="text-[8px] font-black text-orange-500 uppercase tracking-widest">ICC Rank #{t.rank}</span>
+                                            </div>
                                         </div>
                                         <span className="font-black text-orange-500 text-sm italic">{t.points} PT</span>
                                     </div>
@@ -351,9 +360,10 @@
                             <p className="text-white/70 text-[10px] font-black uppercase tracking-[0.3em] mt-4 italic">{playerName}</p>
                         </div>
                         <div className="p-12 space-y-12">
-                            <div className="space-y-4">
+                            <div className="space-y-4 text-center">
                                 <span className="text-[10px] font-black text-orange-500 bg-orange-500/10 px-6 py-2 rounded-full uppercase tracking-widest italic border border-orange-500/20">Campione del Mondo</span>
                                 <div className="text-5xl font-black text-white title-font italic tracking-tighter leading-none">{champion?.name}</div>
+                                <div className="text-[10px] font-black text-slate-500 uppercase">ICC Rank #{champion?.rank}</div>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="bg-white/5 p-6 rounded-[2rem] border border-white/10"><div className="text-[9px] font-black text-slate-500 uppercase mb-2">Runs</div><div className="text-4xl font-black text-orange-500 italic">{tieRuns}</div></div>
@@ -377,6 +387,7 @@
             const [code, setCode] = useState('');
             const [activeTab, setActiveTab] = useState('ranking');
             const [resultStage, setResultStage] = useState('groups');
+            const [detailPlayer, setDetailPlayer] = useState(null);
 
             if(!auth) return (
                 <div className="py-32 px-4 flex justify-center">
@@ -392,7 +403,15 @@
                try {
                    const raw = b64Decode(code.trim().replace('T20-',''));
                    const data = JSON.parse(raw);
-                   const newLb = [...leaderboardData.filter(p=>p.name!==data.n), { name: data.n, champion: TEAMS_MAP[data.cid], matchPredictions: data.mp, tieRuns: data.tr, tieWkts: data.tw, date: data.d, score: 0 }];
+                   const newLb = [...leaderboardData.filter(p=>p.name!==data.n), { 
+                       name: data.n, 
+                       champion: TEAMS_MAP[data.cid], 
+                       matchPredictions: data.mp, 
+                       tieRuns: data.tr, 
+                       tieWkts: data.tw, 
+                       date: data.d, 
+                       score: 0 
+                   }];
                    setLeaderboardData(newLb); 
                    localStorage.setItem('t20_leaderboard_v7', JSON.stringify(newLb));
                    setCode(''); alert("GIOCATORE AGGIUNTO!");
@@ -434,32 +453,72 @@
                     <h2 className="text-5xl font-black title-font text-white italic tracking-tighter text-center uppercase">System <span className="text-orange-500">Admin</span></h2>
                     
                     <div className="flex bg-white/5 rounded-2xl p-1 border border-white/10 shadow-2xl">
-                        <button onClick={()=>setActiveTab('ranking')} className={`flex-1 py-5 text-[10px] font-black uppercase rounded-2xl transition-all ${activeTab==='ranking' ? 'orange-button text-white' : 'text-slate-500'}`}>Ranking</button>
-                        <button onClick={()=>setActiveTab('import')} className={`flex-1 py-5 text-[10px] font-black uppercase rounded-2xl transition-all ${activeTab==='import' ? 'orange-button text-white' : 'text-slate-500'}`}>Importa</button>
-                        <button onClick={()=>setActiveTab('results')} className={`flex-1 py-5 text-[10px] font-black uppercase rounded-2xl transition-all ${activeTab==='results' ? 'orange-button text-white' : 'text-slate-500'}`}>Risultati</button>
+                        <button onClick={()=>setActiveTab('ranking')} className={`flex-1 py-5 text-[10px] font-black uppercase rounded-2xl transition-all ${activeTab==='ranking' ? 'orange-button text-white shadow-lg' : 'text-slate-500'}`}>Ranking</button>
+                        <button onClick={()=>setActiveTab('import')} className={`flex-1 py-5 text-[10px] font-black uppercase rounded-2xl transition-all ${activeTab==='import' ? 'orange-button text-white shadow-lg' : 'text-slate-500'}`}>Importa</button>
+                        <button onClick={()=>setActiveTab('results')} className={`flex-1 py-5 text-[10px] font-black uppercase rounded-2xl transition-all ${activeTab==='results' ? 'orange-button text-white shadow-lg' : 'text-slate-500'}`}>Risultati</button>
                     </div>
 
                     {activeTab === 'ranking' && (
                         <div className="space-y-6">
                             <div className="glass-card rounded-[3.5rem] shadow-2xl border border-white/5 overflow-hidden">
-                                {leaderboardData.length === 0 && <div className="p-10 text-center text-slate-500">Nessun partecipante importato.</div>}
+                                {leaderboardData.length === 0 && <div className="p-10 text-center text-slate-500 uppercase font-black text-[10px]">Nessun partecipante importato.</div>}
                                 {leaderboardData.map((e,i) => (
-                                    <div key={i} className="p-8 flex justify-between items-center border-b border-white/5 hover:bg-white/5">
-                                        <div className="flex items-center gap-6">
+                                    <div key={i} className="p-8 flex flex-col sm:flex-row justify-between sm:items-center border-b border-white/5 hover:bg-white/5 transition-all">
+                                        <div className="flex items-center gap-6 mb-4 sm:mb-0">
                                             <span className="font-black text-slate-700 text-3xl italic">{i+1}</span>
                                             <div>
                                                 <div className="font-black text-slate-100 uppercase text-xl italic">{e.name}</div>
-                                                <div className="text-[10px] text-orange-500 font-black uppercase">Champion: {e.champion?.name}</div>
+                                                <div className="text-[9px] text-orange-500 font-black uppercase tracking-widest italic">Winner: {e.champion?.name} (Rank #{e.champion?.rank})</div>
                                             </div>
                                         </div>
-                                        <div className="text-right">
-                                            <div className="font-black text-orange-500 text-4xl italic">{e.score || 0}</div>
-                                            <div className="text-[10px] font-black text-slate-600 uppercase">Points</div>
+                                        <div className="flex items-center gap-6 justify-between sm:justify-end">
+                                            <button onClick={() => setDetailPlayer(e)} className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl font-black text-[9px] text-slate-400 uppercase tracking-widest hover:text-white hover:border-white/20 transition-all">Vedi Scelte 👁️</button>
+                                            <div className="text-right">
+                                                <div className="font-black text-orange-500 text-4xl italic">{e.score || 0}</div>
+                                                <div className="text-[10px] font-black text-slate-600 uppercase">Points</div>
+                                            </div>
                                         </div>
                                     </div>
                                 ))}
                             </div>
                             <button onClick={copyRankingToWhatsApp} className="w-full py-5 bg-green-600 text-white font-black rounded-3xl uppercase shadow-xl hover:bg-green-700 transition-all text-xs tracking-widest">Copia Classifica per WhatsApp 📱</button>
+                        </div>
+                    )}
+
+                    {/* MODALE DETTAGLIO PARTECIPANTE */}
+                    {detailPlayer && (
+                        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-[100] p-6 flex items-center justify-center animate-fadeIn">
+                            <div className="glass-card w-full max-w-md max-h-[80vh] overflow-y-auto custom-scrollbar rounded-[3rem] p-10 space-y-8 relative border-2 border-orange-500/20">
+                                <button onClick={() => setDetailPlayer(null)} className="absolute top-6 right-8 text-slate-500 text-2xl font-black">×</button>
+                                <div className="text-center">
+                                    <div className="text-[10px] font-black text-orange-500 uppercase tracking-widest mb-2 italic">Dettaglio Pronostico</div>
+                                    <h3 className="text-3xl font-black text-white italic uppercase tracking-tighter">{detailPlayer.name}</h3>
+                                </div>
+                                <div className="space-y-6">
+                                    <div className="bg-white/5 p-6 rounded-2xl border border-white/10">
+                                        <div className="text-[9px] font-black text-slate-500 uppercase mb-2 italic">Campione Scelto</div>
+                                        <div className="flex items-center gap-4">
+                                            <Flag id={detailPlayer.champion?.id} size="h-6"/>
+                                            <div className="font-black text-white uppercase text-lg">{detailPlayer.champion?.name}</div>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="bg-white/5 p-4 rounded-2xl border border-white/10">
+                                            <div className="text-[9px] font-black text-slate-500 uppercase mb-1">Runs Scarto</div>
+                                            <div className="text-2xl font-black text-orange-500 italic">{detailPlayer.tieRuns}</div>
+                                        </div>
+                                        <div className="bg-white/5 p-4 rounded-2xl border border-white/10">
+                                            <div className="text-[9px] font-black text-slate-500 uppercase mb-1">Wkts Scarto</div>
+                                            <div className="text-2xl font-black text-orange-500 italic">{detailPlayer.tieWkts}</div>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <div className="text-[9px] font-black text-slate-500 uppercase italic">ID Pronostico</div>
+                                        <div className="text-[8px] font-mono text-slate-700 break-all select-all">{detailPlayer.matchPredictions ? "Data Encoded Present" : "No Data"}</div>
+                                    </div>
+                                </div>
+                                <button onClick={() => setDetailPlayer(null)} className="w-full py-4 orange-button text-white font-black rounded-2xl uppercase tracking-widest text-[10px]">CHIUDI</button>
+                            </div>
                         </div>
                     )}
 
@@ -487,11 +546,11 @@
                                         {ALL_GROUP_FIXTURES[g].map(m => (
                                             <div key={m.id} className="admin-match-row flex justify-between items-center text-sm">
                                                 <button onClick={()=>updateResult(m.id, m.team1.id)} className={`flex-1 flex items-center gap-3 p-3 rounded-xl transition-all ${realResults.matches?.[m.id] === m.team1.id ? 'bg-orange-500 text-white' : 'bg-white/5 text-slate-400'}`}>
-                                                    <Flag id={m.team1.id} size="h-5"/> {m.team1.name}
+                                                    <Flag id={m.team1.id} size="h-5"/> <div className="flex flex-col text-left"><span className="text-[10px] font-black">{m.team1.name}</span><span className="text-[7px] font-black uppercase tracking-widest">Rank #{m.team1.rank}</span></div>
                                                 </button>
                                                 <span className="px-4 text-[9px] font-black text-slate-700 italic">VS</span>
                                                 <button onClick={()=>updateResult(m.id, m.team2.id)} className={`flex-1 flex items-center justify-end gap-3 p-3 rounded-xl transition-all ${realResults.matches?.[m.id] === m.team2.id ? 'bg-orange-500 text-white' : 'bg-white/5 text-slate-400'}`}>
-                                                    {m.team2.name} <Flag id={m.team2.id} size="h-5"/>
+                                                    <div className="flex flex-col text-right"><span className="text-[10px] font-black">{m.team2.name}</span><span className="text-[7px] font-black uppercase tracking-widest">Rank #{m.team2.rank}</span></div> <Flag id={m.team2.id} size="h-5"/>
                                                 </button>
                                             </div>
                                         ))}
@@ -507,14 +566,14 @@
                                 {resultStage === 'finals' && (
                                     <div className="space-y-12">
                                         <div className="space-y-4">
-                                            <label className="block text-[10px] font-black text-orange-500 uppercase text-center">Vincitore Finale (Campione)</label>
+                                            <label className="block text-[10px] font-black text-orange-500 uppercase text-center italic tracking-widest">Vincitore Reale (Campione)</label>
                                             <select 
                                                 className="w-full p-6 bg-white/5 border border-white/10 rounded-[2rem] font-black text-orange-500 outline-none focus:border-orange-500 text-center uppercase italic" 
                                                 value={realResults.champion || ""} 
                                                 onChange={(e)=>setFinalResult('champion', e.target.value)}
                                             >
                                                 <option value="">-- SELEZIONA SQUADRA --</option>
-                                                {Object.values(TEAMS_MAP).map(t=><option key={t.id} value={t.id}>{t.name.toUpperCase()}</option>)}
+                                                {Object.values(TEAMS_MAP).map(t=><option key={t.id} value={t.id}>{t.name.toUpperCase()} (Rank #{t.rank})</option>)}
                                             </select>
                                         </div>
                                     </div>
@@ -523,7 +582,7 @@
                         </div>
                     )}
                     
-                    <button onClick={()=>setAuth(false)} className="w-full py-6 text-slate-700 font-black text-[11px] uppercase tracking-[0.4em] border border-white/5 rounded-[2rem] active:bg-white/5 mt-16 hover:text-white transition-colors">LOGOUT</button>
+                    <button onClick={()=>setAuth(false)} className="w-full py-6 text-slate-700 font-black text-[11px] uppercase tracking-[0.4em] border border-white/5 rounded-[2rem] active:bg-white/5 mt-16 hover:text-white transition-colors">LOGOUT ADMIN</button>
                 </div>
             );
         };
@@ -556,14 +615,17 @@
                 const data = { n: playerName, cid: champion?.id, mp: matchPredictions, tr: tieRuns, tw: tieWkts, d: new Date().toLocaleDateString('it-IT') };
                 const code = 'T20-' + b64Encode(JSON.stringify(data));
                 const el = document.createElement('textarea'); el.value = code; document.body.appendChild(el); el.select();
-                try { document.execCommand('copy'); alert("CODICE COPIATO ✅\nOra invialo all'admin."); } catch(e) { alert("Copia manuale richiesta."); }
+                try { document.execCommand('copy'); alert("CODICE COPIATO ✅\nOra invialo all'admin per entrare in classifica."); } catch(e) { alert("Copia manuale richiesta."); }
                 document.body.removeChild(el);
             };
 
             const resetGame = () => {
-                setMatchPredictions({});
-                setChampion(null);
-                setPhase(PHASES.INTRO);
+                if(confirm('Azzero tutto?')) {
+                    setMatchPredictions({});
+                    setChampion(null);
+                    setSemiWinners([]);
+                    setPhase(PHASES.INTRO);
+                }
             };
 
             return (
@@ -625,8 +687,8 @@
                                         <div className="text-[10px] font-black text-orange-500 uppercase italic">Semi 1 (1°G1 vs 2°G2)</div>
                                         <div className="space-y-3">
                                             {[super8Standings.S8G1[0], super8Standings.S8G2[1]].map(t => t && (
-                                                <button key={t.id} onClick={()=>setSemiWinners(prev => {const n=[...prev]; n[0]=t; return n;})} className={`w-full p-4 rounded-2xl flex justify-between items-center border-2 transition-all ${semiWinners[0]?.id === t.id ? 'border-orange-500 bg-orange-500 text-white' : 'border-white/5 bg-white/5 text-slate-400'}`}>
-                                                    <span className="team-label">{t.name}</span> <Flag id={t.id} size="h-6"/>
+                                                <button key={t.id} onClick={()=>setSemiWinners(prev => {const n=[...prev]; n[0]=t; return n;})} className={`w-full p-4 rounded-2xl flex justify-between items-center border-2 transition-all ${semiWinners[0]?.id === t.id ? 'border-orange-500 bg-orange-500 text-white shadow-lg' : 'border-white/5 bg-white/5 text-slate-400'}`}>
+                                                    <div className="flex flex-col text-left"><span className="team-label">{t.name}</span><span className="text-[8px] font-black uppercase italic">Rank #{t.rank}</span></div> <Flag id={t.id} size="h-6"/>
                                                 </button>
                                             ))}
                                         </div>
@@ -635,8 +697,8 @@
                                         <div className="text-[10px] font-black text-orange-500 uppercase italic">Semi 2 (1°G2 vs 2°G1)</div>
                                         <div className="space-y-3">
                                             {[super8Standings.S8G2[0], super8Standings.S8G1[1]].map(t => t && (
-                                                <button key={t.id} onClick={()=>setSemiWinners(prev => {const n=[...prev]; n[1]=t; return n;})} className={`w-full p-4 rounded-2xl flex justify-between items-center border-2 transition-all ${semiWinners[1]?.id === t.id ? 'border-orange-500 bg-orange-500 text-white' : 'border-white/5 bg-white/5 text-slate-400'}`}>
-                                                    <span className="team-label">{t.name}</span> <Flag id={t.id} size="h-6"/>
+                                                <button key={t.id} onClick={()=>setSemiWinners(prev => {const n=[...prev]; n[1]=t; return n;})} className={`w-full p-4 rounded-2xl flex justify-between items-center border-2 transition-all ${semiWinners[1]?.id === t.id ? 'border-orange-500 bg-orange-500 text-white shadow-lg' : 'border-white/5 bg-white/5 text-slate-400'}`}>
+                                                    <div className="flex flex-col text-left"><span className="team-label">{t.name}</span><span className="text-[8px] font-black uppercase italic">Rank #{t.rank}</span></div> <Flag id={t.id} size="h-6"/>
                                                 </button>
                                             ))}
                                         </div>
@@ -649,7 +711,10 @@
                                             {semiWinners.map(t => (
                                                 <button key={t.id} onClick={()=>setChampion(t)} className={`flex flex-col items-center gap-4 transition-all ${champion?.id === t.id ? 'scale-110' : 'grayscale opacity-30 hover:opacity-60'}`}>
                                                     <div className="text-6xl">🏆</div>
-                                                    <span className="team-label text-white">{t.name}</span>
+                                                    <div className="flex flex-col">
+                                                        <span className="team-label text-white">{t.name}</span>
+                                                        <span className="text-[8px] font-black text-orange-500 uppercase tracking-widest italic">Rank #{t.rank}</span>
+                                                    </div>
                                                 </button>
                                             ))}
                                         </div>
