@@ -13,28 +13,75 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
 
-    <!-- Libreria PDF -->
+    <!-- Librerie per PDF -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
 
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=Oswald:wght@700&display=swap');
+
+        :root {
+            --brand-blue: #0f172a;
+            --brand-orange: #f97316;
+            --brand-accent: #38bdf8;
+        }
+
         body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
-            background-color: #f8fafc; 
+            font-family: 'Inter', sans-serif;
+            background-color: var(--brand-blue); 
+            color: #f8fafc;
             -webkit-tap-highlight-color: transparent;
             overscroll-behavior-y: contain;
         }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        .animate-fadeIn { animation: fadeIn 0.3s ease-out forwards; }
-        
-        input[type="text"], input[type="number"], input[type="password"], select {
-            font-size: 16px !important; 
-            appearance: none;
-            -webkit-appearance: none;
-            border-radius: 12px;
+
+        .title-font { font-family: 'Oswald', sans-serif; text-transform: uppercase; }
+
+        .animate-fadeIn { animation: fadeIn 0.5s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .orange-button { 
+            background: linear-gradient(135deg, #fb923c 0%, #f97316 100%);
+            box-shadow: 0 10px 25px -5px rgba(249, 115, 22, 0.4);
+        }
+
+        .glass-card { 
+            background: rgba(30, 41, 59, 0.7); 
+            backdrop-filter: blur(12px); 
+            border: 1px solid rgba(255,255,255,0.05);
         }
         
+        .hero-img-container {
+            width: 100%;
+            max-width: 800px;
+            border-radius: 2rem;
+            overflow: hidden;
+            box-shadow: 0 0 40px rgba(249, 115, 22, 0.2);
+            margin-bottom: 2rem;
+        }
+
+        input, select { font-size: 16px !important; border-radius: 12px; }
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: var(--brand-orange); border-radius: 10px; }
+
+        .match-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); transition: all 0.3s; }
+        .selected-winner { background: var(--brand-orange) !important; color: white !important; box-shadow: 0 0 20px rgba(249, 115, 22, 0.3); }
+        
+        .admin-match-row { border-bottom: 1px solid rgba(255,255,255,0.05); padding: 12px 0; }
+
+        /* Ottimizzazione font squadre per nomi lunghi */
+        .team-label {
+            font-size: 10px;
+            line-height: 1.1;
+            font-weight: 900;
+            text-transform: uppercase;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        @media (min-width: 640px) {
+            .team-label { font-size: 12px; }
+        }
     </style>
 </head>
 <body>
@@ -42,13 +89,20 @@
 
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
+        const { jsPDF } = window.jspdf;
 
-        // --- 1. COSTANTI E DATI STATICI ---
+        // --- 1. DATI STATICI ---
         const INITIAL_GROUPS = {
             A: [ { id: 'ind', name: 'India', code: 'in', rank: 1 }, { id: 'pak', name: 'Pakistan', code: 'pk', rank: 7 }, { id: 'ned', name: 'Olanda', code: 'nl', rank: 13 }, { id: 'usa', name: 'USA', code: 'us', rank: 18 }, { id: 'nam', name: 'Namibia', code: 'na', rank: 15 } ],
             B: [ { id: 'aus', name: 'Australia', code: 'au', rank: 2 }, { id: 'ire', name: 'Irlanda', code: 'ie', rank: 11 }, { id: 'oma', name: 'Oman', code: 'om', rank: 20 }, { id: 'sl', name: 'Sri Lanka', code: 'lk', rank: 8 }, { id: 'zim', name: 'Zimbabwe', code: 'zw', rank: 12 } ],
             C: [ { id: 'eng', name: 'Inghilterra', code: 'gb-eng', rank: 3 }, { id: 'ban', name: 'Bangladesh', code: 'bd', rank: 9 }, { id: 'ita', name: 'Italia', code: 'it', rank: 28 }, { id: 'nep', name: 'Nepal', code: 'np', rank: 17 }, { id: 'wi', name: 'West Indies', code: 'jm', rank: 6 } ],
             D: [ { id: 'nz', name: 'Nuova Zelanda', code: 'nz', rank: 4 }, { id: 'sa', name: 'Sudafrica', code: 'za', rank: 5 }, { id: 'can', name: 'Canada', code: 'ca', rank: 19 }, { id: 'afg', name: 'Afghanistan', code: 'af', rank: 10 }, { id: 'uae', name: 'Emirati Arabi', code: 'ae', rank: 16 } ]
+        };
+
+        const PHASES = { 
+            INTRO: 'intro', MATCHES: 'matches', STANDINGS: 'standings', 
+            SUPER8_MATCHES: 'super8_matches', SUPER8_STANDINGS: 'super8_standings',
+            SEMIS_FINAL: 'semis_final', SUMMARY: 'summary', ADMIN: 'admin' 
         };
 
         const TEAMS_MAP = {}; 
@@ -64,20 +118,18 @@
             ALL_GROUP_FIXTURES[g] = f;
         });
 
-        const PHASES = { 
-            INTRO: 'intro', 
-            MATCHES: 'matches', 
-            STANDINGS: 'standings', 
-            SUPER8_MATCHES: 'super8_matches', 
-            SUPER8_STANDINGS: 'super8_standings',
-            SEMIS_FINAL: 'semis_final',
-            SUMMARY: 'summary', 
-            ADMIN: 'admin' 
-        };
-
         // --- 2. HELPERS ---
         const b64Encode = (str) => btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (m, p) => String.fromCharCode('0x' + p)));
         const b64Decode = (str) => decodeURIComponent(atob(str).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+        
+        const generateFixtures = (teams, groupName) => {
+            const f = [];
+            if (!teams || teams.length === 0) return f;
+            for (let i = 0; i < teams.length; i++) 
+                for (let j = i + 1; j < teams.length; j++) 
+                    f.push({ id: `${groupName}-${teams[i].id}-${teams[j].id}`, group: groupName, team1: teams[i], team2: teams[j] });
+            return f;
+        };
 
         const calcRank = (teams, fixtures, predictions) => {
             let stats = teams.map(t => ({ ...t, points: 0 }));
@@ -91,126 +143,392 @@
             return stats.sort((a, b) => b.points - a.points || a.rank - b.rank);
         };
 
+        const WI_FLAG_BASE64 = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2MCA0MCI+PHJlY3Qgd2lkdGg9IjYwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjN2EwMDM1Ii8+PGNpcmNsZSBjeD0iMzAiIGN5PSIzNSIgcj0iMTUiIGZpbGw9IiNmZmQxMDAiIG9wYWNpdHk9IjAuOCIvPjxwYXRoIGQ9Ik0zMCAxNSBMMzAgMzUgTTI1IDM1IEwzNSAzNSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIi8+PHBhdGggZD0iTTMwIDE1IEwzNSAxMCBNMzAgMTUgTDI1IDEwIiBzdHJva2U9IiNmZmQxMDAiIHN0cm9rZS13aWR0aD0iMiIvPjwvc3ZnPg==";
+        const getFlagUrl = (team) => { if (!team) return ''; if (team.id === 'wi') return WI_FLAG_BASE64; return `https://flagcdn.com/w40/${team.code}.png`; };
+        
         const Flag = ({ id, size = "h-4" }) => {
             const team = TEAMS_MAP[id];
             if(!team) return null;
-            const url = team.id === 'wi' ? "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2MCA0MCI+PHJlY3Qgd2lkdGg9IjYwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjN2EwMDM1Ii8+PGNpcmNsZSBjeD0iMzAiIGN5PSIzNSIgcj0iMTUiIGZpbGw9IiNmZmQxMDAiIG9wYWNpdHk9IjAuOCIvPjxwYXRoIGQ9Ik0zMCAxNSBMMzAgMzUgTTI1IDM1IEwzNSAzNSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIi8+PHBhdGggZD0iTTMwIDE1IEwzNSAxMCBNMzAgMTUgTDI1IDEwIiBzdHJva2U9IiNmZmQxMDAiIHN0cm9rZS13aWR0aD0iMiIvPjwvc3ZnPg==" : `https://flagcdn.com/w40/${team.code}.png`;
-            return <img src={url} className={`${size} inline-block mr-1 shadow-sm rounded-sm`} crossOrigin="anonymous" />;
+            return <img src={getFlagUrl(team)} className={`${size} inline-block mr-1 shadow-sm rounded-sm object-contain`} crossOrigin="anonymous" />;
         };
 
-        const T20Logo = ({ className }) => (
-            <svg className={className} viewBox="0 0 600 400" xmlns="http://www.w3.org/2000/svg">
-                 <defs><filter id="glow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="10 10" result="glow"/><feMerge><feMergeNode in="glow"/><feMergeNode in="glow"/></feMerge></filter></defs>
-                 <path d="M150,100 L450,100 L500,200 L450,300 L150,300 L100,200 Z" fill="#f97316" opacity="0.6" filter="url(#glow)" transform="scale(1.1) translate(-30, -10)"/>
-                 <path d="M150,100 L450,100 C480,100 500,130 500,170 L500,230 C500,270 480,300 450,300 L150,300 C120,300 100,270 100,230 L100,170 C100,130 120,100 150,100 Z" fill="#0f172a" stroke="#f97316" strokeWidth="2"/>
-                 <circle cx="300" cy="140" r="25" fill="white" stroke="#0f172a" strokeWidth="2"/>
-                 <text x="300" y="180" fontFamily="Arial, sans-serif" fontSize="20" fontWeight="bold" textAnchor="middle" fill="white" letterSpacing="2">ICC MEN'S T20</text>
-                 <text x="300" y="225" fontFamily="Arial, sans-serif" fontSize="48" fontWeight="900" textAnchor="middle" fill="white" letterSpacing="1">WORLD CUP</text>
-                 <text x="300" y="255" fontFamily="Arial, sans-serif" fontSize="16" fontWeight="bold" textAnchor="middle" fill="white" letterSpacing="1">INDIA & SRI LANKA 2026</text>
-            </svg>
-        );
-
-        // --- 3. COMPONENTI UI ESTERNI ---
+        // --- 3. COMPONENTI UI ---
 
         const Header = ({ setPhase, phase }) => (
-            <header className="bg-[#1e293b] text-white shadow-lg border-b border-purple-900 h-16 flex items-center justify-between px-4 sticky top-0 z-50">
-                <div className="flex items-center gap-2 cursor-pointer" onClick={() => setPhase(PHASES.INTRO)}>
-                    <div className="bg-white p-1 rounded-lg h-8 w-8 flex items-center justify-center overflow-hidden"><T20Logo className="w-full h-full" /></div>
-                    <span className="font-black text-sm uppercase tracking-tighter">T20 WC 2026</span>
+            <header className="h-20 glass-card fixed top-0 w-full z-50 px-6 flex items-center justify-between border-b border-white/10">
+                <div className="flex items-center gap-3 cursor-pointer group" onClick={() => setPhase(PHASES.INTRO)}>
+                    <div className="bg-orange-500 p-2 rounded-xl group-hover:rotate-6 transition-transform">
+                        <span className="text-xl">🏆</span>
+                    </div>
+                    <div className="leading-tight">
+                        <h1 className="title-font text-lg tracking-tighter text-white">WC 2026</h1>
+                        <p className="text-[8px] font-black text-orange-400 uppercase tracking-widest italic">Official Contest</p>
+                    </div>
                 </div>
-                <button onClick={() => setPhase(PHASES.ADMIN)} className={`px-4 py-1.5 rounded-lg font-bold text-[10px] uppercase transition-colors ${phase === PHASES.ADMIN ? 'bg-amber-600' : 'bg-slate-800 text-amber-400 border border-amber-900/30'}`}>
+                <button 
+                    onClick={() => setPhase(PHASES.ADMIN)} 
+                    className={`px-5 py-2 rounded-full font-black text-[10px] uppercase tracking-widest transition-all ${phase === PHASES.ADMIN ? 'bg-orange-500 text-white' : 'bg-white/5 text-orange-400 border border-orange-500/20 hover:bg-white/10'}`}
+                >
                     Area Riservata
                 </button>
             </header>
         );
 
         const Intro = ({ playerName, setPlayerName, onStart }) => (
-            <div className="flex flex-col items-center justify-center min-h-[80vh] text-center p-6 animate-fadeIn">
-                <T20Logo className="w-full max-h-[300px] md:max-h-[450px] mb-8" />
-                <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl w-full max-w-sm border border-slate-100 relative">
-                    <label className="block text-center text-[10px] font-black text-slate-400 uppercase mb-4 tracking-widest">Nickname Partecipante</label>
-                    <div className="flex items-center bg-slate-50 border-2 border-slate-100 rounded-2xl p-2 mb-6 focus-within:border-purple-500 transition-all">
-                        <span className="text-2xl px-2">🏏</span>
-                        <input type="text" className="w-full py-3 bg-transparent outline-none text-[#1e293b] font-bold text-center" value={playerName} onChange={(e) => setPlayerName(e.target.value)} placeholder="Tuo nome..." />
-                        <span className="text-2xl px-2">🏟️</span>
+            <div className="min-h-screen flex flex-col items-center justify-center p-6 pt-24 text-center relative">
+                <div className="max-w-2xl animate-fadeIn space-y-10">
+                    <div className="hero-img-container">
+                         <img 
+                            src="https://images.unsplash.com/photo-1531415074968-036ba1b575da?q=80&w=2067&auto=format&fit=crop" 
+                            alt="Cricket World Cup 2026" 
+                            className="w-full h-auto object-cover"
+                        />
                     </div>
-                    <button disabled={!playerName} onClick={onStart} className="w-full py-5 bg-gradient-to-r from-purple-600 to-indigo-700 text-white font-black rounded-2xl shadow-xl active:scale-95 disabled:opacity-50 mt-2 uppercase tracking-widest">Inizia Pronostico</button>
+                    <div className="glass-card p-10 rounded-[3rem] shadow-2xl space-y-8 max-w-sm mx-auto">
+                        <div className="space-y-4">
+                            <label className="block text-[10px] font-black text-orange-400 uppercase tracking-[0.2em]">Inserisci il tuo Nickname</label>
+                            <input 
+                                type="text" 
+                                className="w-full py-5 px-6 bg-white/5 border border-white/10 rounded-2xl text-white font-black text-center focus:border-orange-500 transition-colors outline-none uppercase placeholder:text-slate-600" 
+                                value={playerName} 
+                                onChange={(e) => setPlayerName(e.target.value)} 
+                                placeholder="NOME BATTAGLIA..."
+                            />
+                        </div>
+                        <button 
+                            disabled={!playerName} 
+                            onClick={onStart} 
+                            className="w-full py-5 orange-button text-white font-black rounded-2xl text-lg uppercase tracking-widest active:scale-95 disabled:opacity-20 transition-all"
+                        >
+                            GIOCA ORA
+                        </button>
+                    </div>
                 </div>
             </div>
         );
 
-        const MatchList = ({ fixtures, predictions, onPick, onComplete, title, nextLabel }) => {
+        const MatchView = ({ fixtures, predictions, onPick, onComplete, title, nextLabel }) => {
             const allMatchIds = Object.values(fixtures).flat().map(m => m.id);
             const done = allMatchIds.filter(id => predictions[id]).length;
             const isComplete = done === allMatchIds.length;
 
             return (
-                <div className="p-4 space-y-6 pb-32 animate-fadeIn max-w-4xl mx-auto">
-                    <h2 className="text-2xl font-black text-[#1e293b] uppercase text-center">{title}</h2>
+                <div className="animate-fadeIn py-32 px-4 max-w-4xl mx-auto space-y-16">
+                    <div className="text-center space-y-4">
+                        <h2 className="text-5xl font-black title-font text-white italic tracking-tighter uppercase">{title}</h2>
+                        <div className="h-1.5 w-24 bg-orange-500 mx-auto rounded-full"></div>
+                    </div>
                     {Object.keys(fixtures).map(g => (
-                        <div key={g} className="bg-white rounded-[2rem] p-4 border shadow-md">
-                            <h3 className="font-black text-purple-700 mb-3 border-b pb-2 text-center text-xs uppercase tracking-widest">
-                                {g.includes('S8') ? `Super 8 - Gruppo ${g.slice(-1)}` : `Gruppo ${g}`}
-                            </h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div key={g} className="space-y-8">
+                            <div className="flex items-center gap-6">
+                                <h3 className="font-black text-orange-500 uppercase tracking-widest text-sm italic">
+                                    {g.includes('S8') ? `Super 8 - GRUPPO ${g.slice(-1)}` : `GIRONE ${g}`}
+                                </h3>
+                                <div className="h-px bg-white/10 flex-1"></div>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                 {fixtures[g].map(m => (
-                                    <div key={m.id} className="bg-slate-50 p-1 rounded-2xl flex items-center justify-between border border-transparent">
-                                        <div onClick={()=>onPick(m.id, m.team1.id)} className={`flex-1 flex items-center gap-2 p-3 rounded-xl cursor-pointer transition-all ${predictions[m.id] === m.team1.id ? 'bg-white shadow ring-2 ring-purple-500' : 'active:bg-slate-200'}`}>
-                                            <Flag id={m.team1.id}/> 
-                                            <div className="flex flex-col text-left">
-                                                <span className={`font-bold text-[11px] leading-tight ${predictions[m.id] === m.team1.id ? 'text-purple-700' : 'text-slate-600'}`}>{m.team1.name}</span>
-                                                <span className="text-[8px] font-black text-slate-400 uppercase">Rank #{m.team1.rank}</span>
-                                            </div>
+                                    <div key={m.id} className="match-card rounded-[2.5rem] p-2 flex items-center justify-between shadow-lg">
+                                        <div onClick={()=>onPick(m.id, m.team1.id)} className={`flex-1 flex items-center gap-3 p-4 rounded-[2rem] cursor-pointer transition-all ${predictions[m.id] === m.team1.id ? 'selected-winner' : 'hover:bg-white/5'}`}>
+                                            <Flag id={m.team1.id} size="h-7"/> 
+                                            <span className="team-label flex-1 text-left">{m.team1.name}</span>
                                         </div>
-                                        <div className="px-2 text-[8px] font-black opacity-20 uppercase">vs</div>
-                                        <div onClick={()=>onPick(m.id, m.team2.id)} className={`flex-1 flex items-center justify-end gap-2 p-3 rounded-xl text-right cursor-pointer transition-all ${predictions[m.id] === m.team2.id ? 'bg-white shadow ring-2 ring-purple-500' : 'active:bg-slate-200'}`}>
-                                            <div className="flex flex-col text-right">
-                                                <span className={`font-bold text-[11px] leading-tight ${predictions[m.id] === m.team2.id ? 'text-purple-700' : 'text-slate-600'}`}>{m.team2.name}</span>
-                                                <span className="text-[8px] font-black text-slate-400 uppercase">Rank #{m.team2.rank}</span>
-                                            </div>
-                                            <Flag id={m.team2.id}/>
+                                        <div className="px-2 font-black text-slate-700 text-[9px] italic">VS</div>
+                                        <div onClick={()=>onPick(m.id, m.team2.id)} className={`flex-1 flex items-center justify-end gap-3 p-4 rounded-[2rem] text-right cursor-pointer transition-all ${predictions[m.id] === m.team2.id ? 'selected-winner' : 'hover:bg-white/5'}`}>
+                                            <span className="team-label flex-1 text-right">{m.team2.name}</span>
+                                            <Flag id={m.team2.id} size="h-7"/>
                                         </div>
                                     </div>
                                 ))}
                             </div>
                         </div>
                     ))}
-                    <div className="fixed bottom-0 left-0 w-full p-4 bg-white/90 backdrop-blur-md border-t z-40 flex flex-col items-center">
-                        {!isComplete && <div className="mb-2 bg-red-500 text-white text-[10px] font-black px-4 py-1 rounded-full shadow-lg">MANCANO {allMatchIds.length - done} PARTITE</div>}
-                        <button onClick={() => isComplete ? onComplete() : null} className={`w-full max-w-md py-4 rounded-2xl font-black transition-all ${isComplete ? 'bg-purple-600 text-white active:scale-95 shadow-xl' : 'bg-slate-200 text-slate-400'}`}>{nextLabel}</button>
+                    <div className="fixed bottom-0 left-0 w-full p-6 glass-card border-t border-white/10 z-40 flex flex-col items-center">
+                        <button onClick={() => isComplete && onComplete()} className={`w-full max-w-md py-5 rounded-2xl font-black uppercase transition-all shadow-2xl ${isComplete ? 'orange-button text-white active:scale-95' : 'bg-white/5 text-slate-600 cursor-not-allowed'}`}>
+                            {nextLabel}
+                        </button>
                     </div>
                 </div>
             );
         };
 
         const StandingsView = ({ standings, title, nextAction, nextLabel }) => (
-            <div className="animate-fadeIn py-8 px-4 space-y-6 text-center max-w-4xl mx-auto pb-24">
-                <h2 className="text-2xl font-black text-[#1e293b] uppercase tracking-tighter">{title}</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="animate-fadeIn py-32 px-4 max-w-5xl mx-auto space-y-12 text-center">
+                <h2 className="text-5xl font-black title-font text-white italic tracking-tighter uppercase">{title}</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     {Object.keys(standings).map(gk => (
-                        <div key={gk} className="bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden">
-                            <div className="bg-[#0f172a] px-4 py-2 flex justify-between items-center text-white">
-                                <h3 className="font-bold text-xs uppercase">{gk.includes('S8') ? `Super 8 Gr ${gk.slice(-1)}` : `Gruppo ${gk}`}</h3>
-                                <span className="text-[8px] bg-purple-500 px-2 py-0.5 rounded font-black uppercase">QUALIFICATE</span>
+                        <div key={gk} className="glass-card rounded-[3rem] border border-white/10 overflow-hidden shadow-2xl">
+                            <div className="bg-white/5 px-8 py-5 flex justify-between items-center border-b border-white/5">
+                                <h3 className="font-black text-xs uppercase tracking-widest text-orange-500 italic">
+                                    {gk.includes('S8') ? `Super 8 Gr ${gk.slice(-1)}` : `GIRONE ${gk}`}
+                                </h3>
+                                <span className="text-[9px] font-black bg-blue-600 px-3 py-1 rounded text-white uppercase tracking-widest">Qualificate</span>
                             </div>
-                            <div className="p-3 space-y-1.5">
+                            <div className="p-6 space-y-3">
                                 {standings[gk].map((t, idx) => (
-                                    <div key={t.id} className={`flex justify-between items-center p-2 rounded-lg ${idx < 2 ? 'bg-purple-50' : 'opacity-40 grayscale'}`}>
-                                        <div className="flex items-center gap-2"><span className="text-[10px] font-black text-slate-300 w-3 text-left">{idx+1}</span><Flag id={t.id} size="h-4"/><span className={`text-xs font-bold ${idx < 2 ? 'text-purple-900' : 'text-slate-400'}`}>{t.name}</span></div>
-                                        <span className="text-xs font-black text-slate-700 text-right">{t.points} pt</span>
+                                    <div key={t.id} className={`flex justify-between items-center p-4 rounded-2xl transition-all ${idx < 2 ? 'bg-white/5 border border-white/10' : 'opacity-20 grayscale'}`}>
+                                        <div className="flex items-center gap-4">
+                                            <span className="font-black text-slate-500 text-lg italic w-6">{idx+1}</span>
+                                            <Flag id={t.id} size="h-6"/>
+                                            <span className="font-black text-sm uppercase text-slate-200">{t.name}</span>
+                                        </div>
+                                        <span className="font-black text-orange-500 text-sm italic">{t.points} PT</span>
                                     </div>
                                 ))}
                             </div>
                         </div>
                     ))}
                 </div>
-                <div className="fixed bottom-0 left-0 w-full p-4 bg-white/90 backdrop-blur-md z-40">
-                    <button onClick={nextAction} className="w-full max-w-md py-4 bg-purple-600 text-white font-black rounded-2xl shadow-xl active:scale-95 transition-all mt-4 uppercase text-sm tracking-widest">{nextLabel} ➡️</button>
+                <div className="fixed bottom-0 left-0 w-full p-8 glass-card z-40 border-t border-white/10">
+                    <button onClick={nextAction} className="w-full max-w-md py-5 orange-button text-white font-black rounded-3xl shadow-2xl uppercase tracking-widest active:scale-95 transition-all">
+                        {nextLabel} ➡️
+                    </button>
                 </div>
             </div>
         );
 
-        // --- 4. APP PRINCIPALE ---
+        const Summary = ({ playerName, champion, tieRuns, tieWkts, copyCode, resetGame, matchPredictions, groupStandings, super8Standings }) => {
+            const downloadPDF = () => {
+                const doc = new jsPDF();
+                const primaryColor = [249, 115, 22]; // Orange-500
+
+                // Header
+                doc.setFillColor(15, 23, 42); // Blue-900
+                doc.rect(0, 0, 210, 40, 'F');
+                doc.setTextColor(255, 255, 255);
+                doc.setFontSize(22);
+                doc.text("T20 WORLD CUP 2026 PREDICTOR", 105, 20, { align: 'center' });
+                doc.setFontSize(12);
+                doc.text(`Partecipante: ${playerName.toUpperCase()}`, 105, 30, { align: 'center' });
+
+                // Campione
+                doc.setTextColor(0, 0, 0);
+                doc.setFontSize(16);
+                doc.text("IL MIO CAMPIONE", 20, 55);
+                doc.setFontSize(24);
+                doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+                doc.text(champion?.name.toUpperCase() || "N/A", 20, 68);
+
+                // Tie breakers
+                doc.setTextColor(0, 0, 0);
+                doc.setFontSize(10);
+                doc.text(`Runs scarto finale: ${tieRuns || 0}`, 20, 78);
+                doc.text(`Wickets scarto finale: ${tieWkts || 0}`, 20, 83);
+
+                // Classifiche Gironi
+                doc.setFontSize(14);
+                doc.text("QUALIFICATE DAI GIRONI", 20, 100);
+                let y = 110;
+                Object.keys(groupStandings).forEach(g => {
+                    const top2 = groupStandings[g].slice(0, 2).map(t => t.name).join(", ");
+                    doc.setFontSize(10);
+                    doc.text(`GIRONE ${g}: ${top2}`, 25, y);
+                    y += 8;
+                });
+
+                // Super 8
+                y += 10;
+                doc.setFontSize(14);
+                doc.text("QUALIFICATE SUPER 8 (SEMIFINALI)", 20, y);
+                y += 10;
+                Object.keys(super8Standings).forEach(g => {
+                    const top2 = super8Standings[g].slice(0, 2).map(t => t.name).join(", ");
+                    doc.setFontSize(10);
+                    const label = g === 'S8G1' ? "GRUPPO 1" : "GRUPPO 2";
+                    doc.text(`${label}: ${top2}`, 25, y);
+                    y += 8;
+                });
+
+                doc.save(`T20_Predictor_${playerName}.pdf`);
+            };
+
+            return (
+                <div className="py-32 px-4 text-center space-y-8 animate-fadeIn pb-48">
+                    <div className="bg-slate-900 rounded-[4rem] shadow-2xl border border-white/5 overflow-hidden max-w-md mx-auto">
+                        <div className="bg-orange-500 p-16 text-white relative">
+                            <div className="text-8xl mb-6 drop-shadow-2xl">🏆</div>
+                            <h2 className="text-4xl font-black title-font italic tracking-tighter">PRONOSTICO COMPLETO</h2>
+                            <p className="text-white/70 text-[10px] font-black uppercase tracking-[0.3em] mt-4 italic">{playerName}</p>
+                        </div>
+                        <div className="p-12 space-y-12">
+                            <div className="space-y-4">
+                                <span className="text-[10px] font-black text-orange-500 bg-orange-500/10 px-6 py-2 rounded-full uppercase tracking-widest italic border border-orange-500/20">Campione del Mondo</span>
+                                <div className="text-5xl font-black text-white title-font italic tracking-tighter leading-none">{champion?.name}</div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="bg-white/5 p-6 rounded-[2rem] border border-white/10"><div className="text-[9px] font-black text-slate-500 uppercase mb-2">Runs</div><div className="text-4xl font-black text-orange-500 italic">{tieRuns}</div></div>
+                                <div className="bg-white/5 p-6 rounded-[2rem] border border-white/10"><div className="text-[9px] font-black text-slate-500 uppercase mb-2">Wkts</div><div className="text-4xl font-black text-orange-500 italic">{tieWkts}</div></div>
+                            </div>
+                            
+                            <div className="space-y-4">
+                                <button onClick={copyCode} className="w-full py-6 orange-button text-white font-black rounded-[2rem] uppercase tracking-widest shadow-2xl active:scale-95">COPIA CODICE PER ADMIN</button>
+                                <button onClick={downloadPDF} className="w-full py-4 bg-white/5 border border-white/20 text-white font-black rounded-[2rem] uppercase tracking-widest hover:bg-white/10 transition-all text-xs">Scarica Riepilogo PDF 📄</button>
+                            </div>
+                        </div>
+                    </div>
+                    <button onClick={() => confirm('Vuoi resettare?') && resetGame()} className="text-red-500/40 font-black text-[9px] uppercase tracking-[0.3em] hover:text-red-500 transition-colors">Reset Contest</button>
+                </div>
+            );
+        };
+
+        const AdminPanel = ({ leaderboardData, setLeaderboardData, realResults, setRealResults }) => {
+            const [pwd, setPwd] = useState('');
+            const [auth, setAuth] = useState(false);
+            const [code, setCode] = useState('');
+            const [activeTab, setActiveTab] = useState('ranking');
+            const [resultStage, setResultStage] = useState('groups');
+
+            if(!auth) return (
+                <div className="py-32 px-4 flex justify-center">
+                    <div className="glass-card p-12 rounded-[3.5rem] shadow-2xl border border-white/5 max-w-xs w-full text-center animate-fadeIn">
+                        <label className="block text-[10px] font-black text-orange-500 uppercase mb-8 tracking-[0.3em]">Access Code</label>
+                        <input type="password" className="w-full p-5 bg-white/5 border border-white/10 rounded-2xl mb-8 text-center font-black tracking-[0.6em] text-white outline-none focus:border-orange-500" value={pwd} onChange={(e)=>setPwd(e.target.value)} />
+                        <button onClick={() => pwd==='admin' ? setAuth(true) : alert('Accesso negato')} className="w-full py-5 orange-button text-white font-black rounded-3xl shadow-xl uppercase tracking-widest text-[11px]">SBLOCCA</button>
+                    </div>
+                </div>
+            );
+            
+            const addPlayer = () => {
+               try {
+                   const raw = b64Decode(code.trim().replace('T20-',''));
+                   const data = JSON.parse(raw);
+                   const newLb = [...leaderboardData.filter(p=>p.name!==data.n), { name: data.n, champion: TEAMS_MAP[data.cid], matchPredictions: data.mp, tieRuns: data.tr, tieWkts: data.tw, date: data.d, score: 0 }];
+                   setLeaderboardData(newLb); 
+                   localStorage.setItem('t20_leaderboard_v7', JSON.stringify(newLb));
+                   setCode(''); alert("GIOCATORE AGGIUNTO!");
+               } catch(e) { alert("ERRORE: CODICE NON VALIDO."); }
+            };
+
+            const updateResult = (id, teamId) => {
+                const updated = { ...realResults, matches: { ...realResults.matches, [id]: teamId } };
+                setRealResults(updated);
+                localStorage.setItem('t20_real_results', JSON.stringify(updated));
+            };
+
+            const setFinalResult = (field, teamId) => {
+                const updated = { ...realResults, [field]: teamId };
+                setRealResults(updated);
+                localStorage.setItem('t20_real_results', JSON.stringify(updated));
+            };
+
+            const copyRankingToWhatsApp = () => {
+                let msg = "*🏆 CLASSIFICA T20 WC 2026 🏆*\n\n";
+                leaderboardData.forEach((player, index) => {
+                    msg += `${index + 1}. *${player.name.toUpperCase()}* - ${player.score || 0} Punti\n`;
+                });
+                msg += "\nGenerato da *Predictor WC 2026*";
+
+                const el = document.createElement('textarea');
+                el.value = msg;
+                document.body.appendChild(el);
+                el.select();
+                try {
+                    document.execCommand('copy');
+                    alert("Classifica copiata! Incollala su WhatsApp.");
+                } catch(e) { alert("Errore copia."); }
+                document.body.removeChild(el);
+            };
+
+            return (
+                <div className="py-32 px-4 max-w-5xl mx-auto space-y-12 pb-48">
+                    <h2 className="text-5xl font-black title-font text-white italic tracking-tighter text-center uppercase">System <span className="text-orange-500">Admin</span></h2>
+                    
+                    <div className="flex bg-white/5 rounded-2xl p-1 border border-white/10 shadow-2xl">
+                        <button onClick={()=>setActiveTab('ranking')} className={`flex-1 py-5 text-[10px] font-black uppercase rounded-2xl transition-all ${activeTab==='ranking' ? 'orange-button text-white' : 'text-slate-500'}`}>Ranking</button>
+                        <button onClick={()=>setActiveTab('import')} className={`flex-1 py-5 text-[10px] font-black uppercase rounded-2xl transition-all ${activeTab==='import' ? 'orange-button text-white' : 'text-slate-500'}`}>Importa</button>
+                        <button onClick={()=>setActiveTab('results')} className={`flex-1 py-5 text-[10px] font-black uppercase rounded-2xl transition-all ${activeTab==='results' ? 'orange-button text-white' : 'text-slate-500'}`}>Risultati</button>
+                    </div>
+
+                    {activeTab === 'ranking' && (
+                        <div className="space-y-6">
+                            <div className="glass-card rounded-[3.5rem] shadow-2xl border border-white/5 overflow-hidden">
+                                {leaderboardData.length === 0 && <div className="p-10 text-center text-slate-500">Nessun partecipante importato.</div>}
+                                {leaderboardData.map((e,i) => (
+                                    <div key={i} className="p-8 flex justify-between items-center border-b border-white/5 hover:bg-white/5">
+                                        <div className="flex items-center gap-6">
+                                            <span className="font-black text-slate-700 text-3xl italic">{i+1}</span>
+                                            <div>
+                                                <div className="font-black text-slate-100 uppercase text-xl italic">{e.name}</div>
+                                                <div className="text-[10px] text-orange-500 font-black uppercase">Champion: {e.champion?.name}</div>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="font-black text-orange-500 text-4xl italic">{e.score || 0}</div>
+                                            <div className="text-[10px] font-black text-slate-600 uppercase">Points</div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            <button onClick={copyRankingToWhatsApp} className="w-full py-5 bg-green-600 text-white font-black rounded-3xl uppercase shadow-xl hover:bg-green-700 transition-all text-xs tracking-widest">Copia Classifica per WhatsApp 📱</button>
+                        </div>
+                    )}
+
+                    {activeTab === 'import' && (
+                        <div className="glass-card p-16 rounded-[4rem] text-center space-y-10">
+                            <textarea className="w-full h-48 p-10 bg-white/5 border border-white/10 rounded-[3rem] text-[11px] font-mono text-white outline-none focus:border-orange-500 transition-all text-center" value={code} onChange={e=>setCode(e.target.value)} placeholder="INCOLLA IL CODICE T20- QUI..."></textarea>
+                            <button onClick={addPlayer} className="w-full py-6 orange-button text-white font-black rounded-[2rem] uppercase tracking-widest shadow-2xl text-sm">IMPORTA DATI</button>
+                        </div>
+                    )}
+
+                    {activeTab === 'results' && (
+                        <div className="space-y-12">
+                            <div className="flex gap-4 justify-center">
+                                {['groups', 'super8', 'finals'].map(s => (
+                                    <button key={s} onClick={()=>setResultStage(s)} className={`px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${resultStage === s ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20' : 'bg-white/5 text-slate-500 border border-white/10'}`}>
+                                        {s === 'groups' ? 'Gironi' : s === 'super8' ? 'Super 8' : 'Finali'}
+                                    </button>
+                                ))}
+                            </div>
+
+                            <div className="glass-card p-10 rounded-[3rem] shadow-2xl">
+                                {resultStage === 'groups' && Object.keys(ALL_GROUP_FIXTURES).map(g => (
+                                    <div key={g} className="mb-12 last:mb-0">
+                                        <h4 className="text-orange-500 font-black uppercase text-xs mb-4 italic tracking-widest border-b border-orange-500/20 pb-2">Girone {g}</h4>
+                                        {ALL_GROUP_FIXTURES[g].map(m => (
+                                            <div key={m.id} className="admin-match-row flex justify-between items-center text-sm">
+                                                <button onClick={()=>updateResult(m.id, m.team1.id)} className={`flex-1 flex items-center gap-3 p-3 rounded-xl transition-all ${realResults.matches?.[m.id] === m.team1.id ? 'bg-orange-500 text-white' : 'bg-white/5 text-slate-400'}`}>
+                                                    <Flag id={m.team1.id} size="h-5"/> {m.team1.name}
+                                                </button>
+                                                <span className="px-4 text-[9px] font-black text-slate-700 italic">VS</span>
+                                                <button onClick={()=>updateResult(m.id, m.team2.id)} className={`flex-1 flex items-center justify-end gap-3 p-3 rounded-xl transition-all ${realResults.matches?.[m.id] === m.team2.id ? 'bg-orange-500 text-white' : 'bg-white/5 text-slate-400'}`}>
+                                                    {m.team2.name} <Flag id={m.team2.id} size="h-5"/>
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ))}
+
+                                {resultStage === 'super8' && (
+                                    <div className="text-center py-10">
+                                        <p className="text-slate-500 italic text-sm">Le partite dei Super 8 verranno caricate automaticamente basandosi sui risultati reali dei gironi.</p>
+                                    </div>
+                                )}
+
+                                {resultStage === 'finals' && (
+                                    <div className="space-y-12">
+                                        <div className="space-y-4">
+                                            <label className="block text-[10px] font-black text-orange-500 uppercase text-center">Vincitore Finale (Campione)</label>
+                                            <select 
+                                                className="w-full p-6 bg-white/5 border border-white/10 rounded-[2rem] font-black text-orange-500 outline-none focus:border-orange-500 text-center uppercase italic" 
+                                                value={realResults.champion || ""} 
+                                                onChange={(e)=>setFinalResult('champion', e.target.value)}
+                                            >
+                                                <option value="">-- SELEZIONA SQUADRA --</option>
+                                                {Object.values(TEAMS_MAP).map(t=><option key={t.id} value={t.id}>{t.name.toUpperCase()}</option>)}
+                                            </select>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                    
+                    <button onClick={()=>setAuth(false)} className="w-full py-6 text-slate-700 font-black text-[11px] uppercase tracking-[0.4em] border border-white/5 rounded-[2rem] active:bg-white/5 mt-16 hover:text-white transition-colors">LOGOUT</button>
+                </div>
+            );
+        };
+
+        // --- 4. APP COMPONENT ---
 
         function App() {
             const [phase, setPhase] = useState(PHASES.INTRO);
@@ -227,97 +545,64 @@
             const [leaderboard, setLeaderboard] = useState([]);
             const [realResults, setRealResults] = useState({ matches: {}, champion: null });
 
-            // Admin Logic
-            const [isAdminAuth, setIsAdminAuth] = useState(false);
-            const [adminPasswordInput, setAdminPasswordInput] = useState('');
-            const [adminTab, setAdminTab] = useState('ranking');
-
             useEffect(() => {
-                const lb = localStorage.getItem('t20_leaderboard_v6');
+                const lb = localStorage.getItem('t20_leaderboard_v7');
                 if(lb) setLeaderboard(JSON.parse(lb));
                 const rr = localStorage.getItem('t20_real_results');
                 if(rr) setRealResults(JSON.parse(rr));
             }, []);
 
-            const sortedLB = useMemo(() => {
-                return [...leaderboard].map(e => {
-                    let score = 0;
-                    if (realResults.matches) { 
-                        Object.keys(realResults.matches).forEach(mid => { 
-                            const rw = realResults.matches[mid]; 
-                            if(rw === 'ABANDONED') score += 1; 
-                            else if(rw === e.mp[mid]) {
-                                const team = TEAMS_MAP[rw];
-                                score += (team ? team.rank : 1);
-                            }
-                        }); 
-                    }
-                    if (realResults.champion && e.cid === realResults.champion) score += 70;
-                    return {...e, totalScore: score};
-                }).sort((a,b) => b.totalScore - a.totalScore);
-            }, [leaderboard, realResults]);
-
-            const generateFixturesLocal = (teams, groupName) => {
-                const f = [];
-                for (let i = 0; i < teams.length; i++) 
-                    for (let j = i + 1; j < teams.length; j++) 
-                        f.push({ id: `${groupName}-${teams[i].id}-${teams[j].id}`, group: groupName, team1: teams[i], team2: teams[j] });
-                return f;
-            };
-
-            const handleCopyCode = () => {
-                const data = { n: playerName, cid: champion?.id, sid: semiWinners.map(t=>t?.id), mp: matchPredictions, tr: tieRuns, tw: tieWkts, d: new Date().toLocaleDateString('it-IT') };
+            const copyCode = () => {
+                const data = { n: playerName, cid: champion?.id, mp: matchPredictions, tr: tieRuns, tw: tieWkts, d: new Date().toLocaleDateString('it-IT') };
                 const code = 'T20-' + b64Encode(JSON.stringify(data));
-                const el = document.createElement('textarea');
-                el.value = code; document.body.appendChild(el); el.select();
-                try {
-                    document.execCommand('copy');
-                    alert("CODICE COPIATO ✅\nOra incollalo nella chat dell'admin.");
-                } catch(e) { alert("Copia fallita. Seleziona il testo manualmente."); }
+                const el = document.createElement('textarea'); el.value = code; document.body.appendChild(el); el.select();
+                try { document.execCommand('copy'); alert("CODICE COPIATO ✅\nOra invialo all'admin."); } catch(e) { alert("Copia manuale richiesta."); }
                 document.body.removeChild(el);
             };
 
             const resetGame = () => {
-                setMatchPredictions({}); setGroupStandings({}); setChampion(null); setTieRuns(''); setTieWkts(''); setPhase(PHASES.INTRO);
+                setMatchPredictions({});
+                setChampion(null);
+                setPhase(PHASES.INTRO);
             };
 
             return (
                 <div className="min-h-screen flex flex-col">
                     <Header setPhase={setPhase} phase={phase} />
                     
-                    <main className="flex-grow w-full max-w-6xl mx-auto">
+                    <main className="flex-grow">
                         {phase === PHASES.INTRO && <Intro playerName={playerName} setPlayerName={setPlayerName} onStart={()=>setPhase(PHASES.MATCHES)} />}
                         
                         {phase === PHASES.MATCHES && (
-                            <MatchList 
+                            <MatchView 
                                 fixtures={ALL_GROUP_FIXTURES} predictions={matchPredictions} 
                                 onPick={(mid, wid)=>setMatchPredictions(p=>({...p, [mid]: wid}))}
                                 onComplete={() => {
-                                    const s = {}; Object.keys(INITIAL_GROUPS).forEach(g => s[g] = calcRank(INITIAL_GROUPS[g], generateFixtures(INITIAL_GROUPS[g], g), matchPredictions));
+                                    const s = {}; Object.keys(INITIAL_GROUPS).forEach(g => s[g] = calcRank(INITIAL_GROUPS[g], ALL_GROUP_FIXTURES[g], matchPredictions));
                                     setGroupStandings(s); setPhase(PHASES.STANDINGS);
                                 }}
-                                title="Fase a Gironi" nextLabel="Calcola Classifiche"
+                                title="Fase a Gironi" nextLabel="Vedi Classifiche"
                             />
                         )}
 
                         {phase === PHASES.STANDINGS && (
                             <StandingsView 
-                                standings={groupStandings} title="Risultati Gironi" nextLabel="Genera Super 8" 
+                                standings={groupStandings} title="Classifiche Gironi" nextLabel="Vai ai Super 8" 
                                 nextAction={() => {
                                     const G1 = [groupStandings.A[0], groupStandings.B[1], groupStandings.C[0], groupStandings.D[1]].filter(Boolean);
                                     const G2 = [groupStandings.A[1], groupStandings.B[0], groupStandings.C[1], groupStandings.D[0]].filter(Boolean);
                                     setSuper8Groups({ G1, G2 });
-                                    setSuper8Fixtures({ S8G1: generateFixturesLocal(G1, 'S8G1'), S8G2: generateFixturesLocal(G2, 'S8G2') });
+                                    setSuper8Fixtures({ S8G1: generateFixtures(G1, 'S8G1'), S8G2: generateFixtures(G2, 'S8G2') });
                                     setPhase(PHASES.SUPER8_MATCHES);
                                 }} 
                             />
                         )}
 
                         {phase === PHASES.SUPER8_MATCHES && (
-                            <MatchList 
+                            <MatchView 
                                 fixtures={super8Fixtures} predictions={matchPredictions}
                                 onPick={(mid, wid)=>setMatchPredictions(p=>({...p, [mid]: wid}))}
-                                title="Seconda Fase - Super 8" nextLabel="Vedi Classifiche S8"
+                                title="Fase Super 8" nextLabel="Vedi Classifiche S8"
                                 onComplete={() => {
                                     setSuper8Standings({ 
                                         S8G1: calcRank(super8Groups.G1, super8Fixtures.S8G1, matchPredictions), 
@@ -329,40 +614,52 @@
                         )}
 
                         {phase === PHASES.SUPER8_STANDINGS && (
-                            <StandingsView standings={super8Standings} title="Ranking Super 8" nextLabel="Vai alle Finali" nextAction={() => setPhase(PHASES.SEMIS_FINAL)} />
+                            <StandingsView standings={super8Standings} title="Super 8 Ranking" nextLabel="Vai alle Finali" nextAction={() => setPhase(PHASES.SEMIS_FINAL)} />
                         )}
 
                         {phase === PHASES.SEMIS_FINAL && (
-                             <div className="p-4 sm:p-6 space-y-12 animate-fadeIn max-w-4xl mx-auto pb-32 text-center">
-                                <h2 className="text-2xl font-black uppercase text-[#1e293b]">Fase Finale</h2>
+                            <div className="py-32 px-4 space-y-16 animate-fadeIn max-w-5xl mx-auto text-center">
+                                <h2 className="text-6xl font-black title-font text-white italic tracking-tighter uppercase">The Knockouts</h2>
                                 <div className="grid md:grid-cols-2 gap-8">
-                                    <div className="bg-white p-6 rounded-3xl shadow-md border border-slate-100">
-                                        <div className="text-[9px] font-black text-slate-300 mb-4 tracking-widest uppercase">Semi 1 (1°G1 vs 2°G2)</div>
+                                    <div className="glass-card p-10 rounded-[3rem] shadow-2xl space-y-6">
+                                        <div className="text-[10px] font-black text-orange-500 uppercase italic">Semi 1 (1°G1 vs 2°G2)</div>
                                         <div className="space-y-3">
-                                            {[super8Standings.S8G1[0], super8Standings.S8G2[1]].map(t => t && <button key={t.id} onClick={() => { const nw = [...semiWinners]; nw[0] = t; setSemiWinners(nw); if(champion?.id!==t.id)setChampion(null); }} className={`w-full p-4 border-2 rounded-xl flex justify-between items-center transition-all ${semiWinners[0]?.id===t.id ? 'bg-purple-50 border-purple-500 text-purple-900 shadow-md':'border-slate-50 text-slate-400'}`}><span className="font-bold text-sm uppercase">{t.name}</span><Flag id={t.id} size="h-5"/></button>)}
+                                            {[super8Standings.S8G1[0], super8Standings.S8G2[1]].map(t => t && (
+                                                <button key={t.id} onClick={()=>setSemiWinners(prev => {const n=[...prev]; n[0]=t; return n;})} className={`w-full p-4 rounded-2xl flex justify-between items-center border-2 transition-all ${semiWinners[0]?.id === t.id ? 'border-orange-500 bg-orange-500 text-white' : 'border-white/5 bg-white/5 text-slate-400'}`}>
+                                                    <span className="team-label">{t.name}</span> <Flag id={t.id} size="h-6"/>
+                                                </button>
+                                            ))}
                                         </div>
                                     </div>
-                                    <div className="bg-white p-6 rounded-3xl shadow-md border border-slate-100">
-                                        <div className="text-[9px] font-black text-slate-300 mb-4 tracking-widest uppercase">Semi 2 (1°G2 vs 2°G1)</div>
+                                    <div className="glass-card p-10 rounded-[3rem] shadow-2xl space-y-6">
+                                        <div className="text-[10px] font-black text-orange-500 uppercase italic">Semi 2 (1°G2 vs 2°G1)</div>
                                         <div className="space-y-3">
-                                            {[super8Standings.S8G2[0], super8Standings.S8G1[1]].map(t => t && <button key={t.id} onClick={() => { const nw = [...semiWinners]; nw[1] = t; setSemiWinners(nw); if(champion?.id!==t.id)setChampion(null); }} className={`w-full p-4 border-2 rounded-xl flex justify-between items-center transition-all ${semiWinners[1]?.id===t.id ? 'bg-purple-50 border-purple-500 text-purple-900 shadow-md':'border-slate-50 text-slate-400'}`}><span className="font-bold text-sm uppercase">{t.name}</span><Flag id={t.id} size="h-5"/></button>)}
+                                            {[super8Standings.S8G2[0], super8Standings.S8G1[1]].map(t => t && (
+                                                <button key={t.id} onClick={()=>setSemiWinners(prev => {const n=[...prev]; n[1]=t; return n;})} className={`w-full p-4 rounded-2xl flex justify-between items-center border-2 transition-all ${semiWinners[1]?.id === t.id ? 'border-orange-500 bg-orange-500 text-white' : 'border-white/5 bg-white/5 text-slate-400'}`}>
+                                                    <span className="team-label">{t.name}</span> <Flag id={t.id} size="h-6"/>
+                                                </button>
+                                            ))}
                                         </div>
                                     </div>
                                 </div>
                                 {semiWinners[0] && semiWinners[1] && (
-                                    <div className="bg-[#0f172a] p-8 rounded-3xl text-center text-white shadow-2xl animate-fadeIn mt-10">
-                                        <h3 className="font-black text-2xl mb-8 text-purple-400 uppercase tracking-tighter">Grand Final 2026</h3>
-                                        <div className="flex justify-center gap-6 mb-10">
-                                            {semiWinners.map(t => t && <button key={t.id} onClick={() => setChampion(t)} className={`flex-1 p-6 rounded-3xl border-4 transition-all ${champion?.id===t.id ? 'border-purple-400 bg-purple-900 scale-105 shadow-xl' : 'border-slate-700 grayscale opacity-40'}`}><div className="text-5xl mb-3 text-center">🏆</div><div className="font-black text-[10px] uppercase tracking-tighter text-center">{t.name}</div></button>)}
+                                    <div className="animate-fadeIn space-y-12">
+                                        <h3 className="text-3xl font-black text-white italic uppercase tracking-tighter">Gran Finale 2026</h3>
+                                        <div className="flex justify-center gap-12">
+                                            {semiWinners.map(t => (
+                                                <button key={t.id} onClick={()=>setChampion(t)} className={`flex flex-col items-center gap-4 transition-all ${champion?.id === t.id ? 'scale-110' : 'grayscale opacity-30 hover:opacity-60'}`}>
+                                                    <div className="text-6xl">🏆</div>
+                                                    <span className="team-label text-white">{t.name}</span>
+                                                </button>
+                                            ))}
                                         </div>
                                         {champion && (
-                                            <div className="bg-white/5 p-8 rounded-3xl border border-white/10 max-w-sm mx-auto space-y-6 text-center">
-                                                <p className="text-[10px] font-black text-purple-400 tracking-widest uppercase text-center">Spareggio Finale</p>
-                                                <div className="flex gap-4 text-center">
-                                                    <div className="flex-1 space-y-1"><label className="text-[8px] text-slate-400 uppercase font-black">Runs</label><input type="number" className="w-full p-3 rounded-xl text-black font-bold text-center text-sm" value={tieRuns} onChange={e=>setTieRuns(e.target.value)} placeholder="0"/></div>
-                                                    <div className="flex-1 space-y-1"><label className="text-[8px] text-slate-400 uppercase font-black">Wkts</label><input type="number" className="w-full p-3 rounded-xl text-black font-bold text-center text-sm" value={tieWkts} onChange={e=>setTieWkts(e.target.value)} placeholder="0"/></div>
+                                            <div className="max-w-xs mx-auto space-y-4">
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div><label className="text-[9px] font-black text-slate-500 uppercase">Runs Scarto</label><input type="number" className="w-full p-4 bg-white/5 border border-white/10 rounded-xl text-center font-black" value={tieRuns} onChange={e=>setTieRuns(e.target.value)}/></div>
+                                                    <div><label className="text-[9px] font-black text-slate-500 uppercase">Wkts Scarto</label><input type="number" className="w-full p-4 bg-white/5 border border-white/10 rounded-xl text-center font-black" value={tieWkts} onChange={e=>setTieWkts(e.target.value)}/></div>
                                                 </div>
-                                                <button disabled={!tieRuns || tieWkts===''} onClick={()=>setPhase(PHASES.SUMMARY)} className="w-full py-4 bg-purple-500 text-white font-black rounded-xl uppercase text-xs active:scale-95 shadow-lg tracking-widest">CONFERMA E FINISCI</button>
+                                                <button onClick={()=>setPhase(PHASES.SUMMARY)} className="w-full py-5 orange-button text-white font-black rounded-2xl uppercase shadow-2xl">Concludi Pronostico</button>
                                             </div>
                                         )}
                                     </div>
@@ -370,123 +667,21 @@
                             </div>
                         )}
 
-                        {phase === PHASES.SUMMARY && (
-                            <div className="p-6 text-center space-y-8 animate-fadeIn pb-32">
-                                <div id="summary-card" className="bg-white rounded-[3rem] shadow-2xl border overflow-hidden max-w-md mx-auto text-center">
-                                    <div className="bg-[#1e293b] p-10 text-white text-center">
-                                        <div className="text-5xl mb-4 text-center">🏆</div>
-                                        <h2 className="text-2xl font-black uppercase tracking-tighter text-center">PRONOSTICO COMPLETATO</h2>
-                                        <p className="text-purple-400 text-xs font-bold mt-1 uppercase tracking-widest text-center">{playerName}</p>
-                                    </div>
-                                    <div className="p-10 space-y-10 text-center">
-                                        <div>
-                                            <span className="text-[9px] font-black text-purple-700 bg-purple-50 px-4 py-1.5 rounded-full uppercase text-center">Vincitore Pronosticato</span>
-                                            <div className="text-4xl font-black text-[#0f172a] mt-6 uppercase text-center">{champion?.name}</div>
-                                        </div>
-                                        <button onClick={handleCopyCode} className="w-full py-5 bg-green-600 hover:bg-green-500 text-white font-black rounded-2xl shadow-lg active:scale-95 transition-all uppercase tracking-widest text-center">COPIA CODICE PER ADMIN</button>
-                                    </div>
-                                </div>
-                                <div className="flex justify-between items-center max-w-md mx-auto px-4">
-                                    <button onClick={()=>window.print()} className="text-slate-400 font-bold text-[10px] uppercase underline">Salva PDF</button>
-                                    <button onClick={()=>{if(confirm('Ricominciare?')){resetGame()}}} className="text-red-400 font-bold text-[10px] uppercase underline">Ricomincia</button>
-                                </div>
-                            </div>
-                        )}
+                        {phase === PHASES.SUMMARY && <Summary 
+                            playerName={playerName} 
+                            champion={champion} 
+                            tieRuns={tieRuns} 
+                            tieWkts={tieWkts} 
+                            copyCode={copyCode} 
+                            resetGame={resetGame} 
+                            matchPredictions={matchPredictions}
+                            groupStandings={groupStandings}
+                            super8Standings={super8Standings}
+                        />}
+                        {phase === PHASES.ADMIN && <AdminPanel leaderboardData={leaderboard} setLeaderboardData={setLeaderboard} realResults={realResults} setRealResults={setRealResults} />}
 
-                        {phase === PHASES.ADMIN && (
-                            <div className="p-4 sm:p-8 animate-fadeIn space-y-8 max-w-4xl mx-auto pb-32">
-                                <h2 className="text-2xl font-black text-center uppercase tracking-tight text-[#1e293b]">Pannello Amministratore</h2>
-                                
-                                {!isAdminAuth ? (
-                                    <div className="bg-white p-10 rounded-[2.5rem] shadow-xl border max-w-xs mx-auto text-center animate-fadeIn">
-                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-4 tracking-widest text-center">Password Admin</label>
-                                        <input type="password" className="w-full p-4 border-2 border-slate-100 rounded-2xl mb-4 text-center font-black tracking-widest outline-none focus:border-purple-500 text-center" value={adminPasswordInput} onChange={(e)=>setAdminPasswordInput(e.target.value)} placeholder="••••" onKeyDown={(e)=>e.key==='Enter' && adminPasswordInput==='admin' && setIsAdminAuth(true)} />
-                                        <button onClick={() => { if(adminPasswordInput==='admin'){setIsAdminAuth(true);setAdminPasswordInput('');} else {alert('Password Errata');} }} className="w-full py-4 bg-[#1e293b] text-white font-black rounded-2xl active:scale-95 transition-all shadow-lg uppercase tracking-widest">SBLOCCA</button>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-6">
-                                        <div className="flex bg-white rounded-2xl p-1 shadow-sm border overflow-hidden">
-                                            <button onClick={()=>setAdminTab('ranking')} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all ${adminTab==='ranking' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400'}`}>Ranking Live</button>
-                                            <button onClick={()=>setAdminTab('import')} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all ${adminTab==='import' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400'}`}>Importa</button>
-                                            <button onClick={()=>setAdminTab('results')} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all ${adminTab==='results' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400'}`}>Risultati</button>
-                                        </div>
-
-                                        {adminTab === 'ranking' && (
-                                            <div className="bg-white rounded-[2.5rem] shadow-xl border overflow-hidden animate-fadeIn text-center">
-                                                <div className="bg-[#0f172a] p-5 text-white flex justify-between items-center">
-                                                    <h3 className="font-black text-sm uppercase tracking-widest">Classifica Contest</h3>
-                                                    <span className="text-[10px] font-bold bg-purple-500 px-2 py-1 rounded text-right">{sortedLB.length} Partecipanti</span>
-                                                </div>
-                                                <div className="divide-y divide-slate-100">
-                                                    {sortedLB.map((e,i) => (
-                                                        <div key={i} className="p-5 flex justify-between items-center hover:bg-slate-50 transition-all">
-                                                            <div className="flex items-center gap-4">
-                                                                <span className="font-black text-slate-200 text-2xl w-8 text-center">{i+1}</span>
-                                                                <div className="text-left leading-tight">
-                                                                    <div className="font-black text-slate-800 uppercase text-sm text-left">{e.n}</div>
-                                                                    <div className="text-[10px] text-slate-400 text-left">Winner: {TEAMS_MAP[e.cid]?.name || 'N/A'}</div>
-                                                                </div>
-                                                            </div>
-                                                            <div className="flex items-center gap-6">
-                                                                <div className="text-right leading-none">
-                                                                    <div className="font-black text-amber-500 text-2xl text-right">{e.totalScore}</div>
-                                                                    <div className="text-[8px] font-black text-slate-300 uppercase text-right">Punti</div>
-                                                                </div>
-                                                                <button onClick={()=>alert(`Tie-Breaker: ${e.tr} runs / ${e.tw} wkts\nData: ${e.d}`)} className="bg-purple-50 text-purple-700 p-2 rounded-xl">
-                                                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                    {leaderboard.length === 0 && <div className="p-20 text-center text-slate-400 text-xs italic">Nessun giocatore caricato.</div>}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {adminTab === 'import' && (
-                                            <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border animate-fadeIn text-center">
-                                                <h3 className="font-black text-sm text-[#0f172a] mb-6 uppercase tracking-widest text-center">Importazione Dati</h3>
-                                                <textarea id="admin_import_area" className="w-full h-40 p-5 border-2 border-slate-50 rounded-[1.5rem] text-[10px] font-mono mb-6 bg-slate-50 outline-none focus:bg-white focus:border-purple-500 transition-all text-center" placeholder="Incolla qui il codice T20-..."></textarea>
-                                                <button onClick={()=>{
-                                                    try {
-                                                        const v = document.getElementById('admin_import_area').value;
-                                                        if(!v.startsWith('T20-')) throw new Error();
-                                                        const d = JSON.parse(b64Decode(v.trim().replace('T20-','')));
-                                                        const u = [...leaderboard.filter(x=>x.n!==d.n), d];
-                                                        setLeaderboard(u); localStorage.setItem('t20_leaderboard_v6', JSON.stringify(u));
-                                                        alert("Importazione Riuscita! ✅"); document.getElementById('admin_import_area').value="";
-                                                    } catch(e){ alert("Errore: Il codice non è valido."); }
-                                                }} className="w-full py-5 bg-green-600 text-white font-black rounded-2xl uppercase tracking-widest shadow-lg active:scale-95 transition-all text-center">CARICA GIOCATORE</button>
-                                                <div className="mt-10 border-t pt-6 text-center">
-                                                     <button onClick={()=>{if(confirm('Attenzione: cancellerai tutti i partecipanti. Procedere?')){setLeaderboard([]);localStorage.removeItem('t20_leaderboard_v6');}}} className="text-red-500 font-bold text-[10px] uppercase underline opacity-60 hover:opacity-100">Reset Classifica</button>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {adminTab === 'results' && (
-                                            <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border animate-fadeIn text-center">
-                                                <h3 className="font-black text-sm text-[#0f172a] mb-8 uppercase tracking-widest text-center">Risultati Reali</h3>
-                                                <div>
-                                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-3 text-center">Vincitore Reale del Mondiale</label>
-                                                    <select className="w-full p-4 border-2 border-slate-50 rounded-2xl font-bold bg-slate-50 outline-none focus:border-purple-500 text-center" value={realResults.champion || ""} onChange={(e)=>{
-                                                        const n = {...realResults, champion: e.target.value};
-                                                        setRealResults(n);
-                                                        localStorage.setItem('t20_real_results', JSON.stringify(n));
-                                                    }}>
-                                                        <option value="">-- Seleziona Squadra --</option>
-                                                        {Object.values(TEAMS_MAP).map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
-                                                    </select>
-                                                </div>
-                                            </div>
-                                        )}
-                                        
-                                        <button onClick={()=>setIsAdminAuth(false)} className="w-full py-4 text-slate-400 font-black text-[10px] uppercase tracking-widest border border-slate-200 rounded-2xl active:bg-slate-100 mt-6 text-center">Chiudi Pannello</button>
-                                    </div>
-                                )}
-                            </div>
-                        )}
                     </main>
-                    <footer className="py-10 text-center text-slate-300 text-[10px] font-black uppercase tracking-[0.5em] mt-auto">ICC Men's T20 World Cup</footer>
+                    <footer className="py-20 text-center text-slate-800 text-[11px] font-black uppercase tracking-[0.7em] border-t border-white/5 mt-auto">ICC Men's T20 World Cup</footer>
                 </div>
             );
         }
