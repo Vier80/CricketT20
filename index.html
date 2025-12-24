@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>2026 T20 World Cup Predictor</title>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Libreria PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            background-color: #f8fafc; 
+            -webkit-tap-highlight-color: transparent;
+            overscroll-behavior-y: contain;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fadeIn { animation: fadeIn 0.3s ease-out forwards; }
+        
+        /* Fix focus su iPhone: impedisce lo zoom automatico e la perdita di focus */
+        input[type="text"], input[type="number"], select {
+            font-size: 16px !important; 
+            appearance: none;
+            -webkit-appearance: none;
+            border-radius: 12px;
+        }
+        
+        .purple-gradient { background: linear-gradient(135deg, #9333ea 0%, #4f46e5 100%); }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        // --- 1. DATI STATICI ---
+        const INITIAL_GROUPS = {
+            A: [ { id: 'ind', name: 'India', code: 'in', rank: 1 }, { id: 'pak', name: 'Pakistan', code: 'pk', rank: 7 }, { id: 'ned', name: 'Olanda', code: 'nl', rank: 13 }, { id: 'usa', name: 'USA', code: 'us', rank: 18 }, { id: 'nam', name: 'Namibia', code: 'na', rank: 15 } ],
+            B: [ { id: 'aus', name: 'Australia', code: 'au', rank: 2 }, { id: 'ire', name: 'Irlanda', code: 'ie', rank: 11 }, { id: 'oma', name: 'Oman', code: 'om', rank: 20 }, { id: 'sl', name: 'Sri Lanka', code: 'lk', rank: 8 }, { id: 'zim', name: 'Zimbabwe', code: 'zw', rank: 12 } ],
+            C: [ { id: 'eng', name: 'Inghilterra', code: 'gb-eng', rank: 3 }, { id: 'ban', name: 'Bangladesh', code: 'bd', rank: 9 }, { id: 'ita', name: 'Italia', code: 'it', rank: 28 }, { id: 'nep', name: 'Nepal', code: 'np', rank: 17 }, { id: 'wi', name: 'West Indies', code: 'jm', rank: 6 } ],
+            D: [ { id: 'nz', name: 'Nuova Zelanda', code: 'nz', rank: 4 }, { id: 'sa', name: 'Sudafrica', code: 'za', rank: 5 }, { id: 'can', name: 'Canada', code: 'ca', rank: 19 }, { id: 'afg', name: 'Afghanistan', code: 'af', rank: 10 }, { id: 'uae', name: 'Emirati Arabi', code: 'ae', rank: 16 } ]
+        };
+
+        const TEAMS_MAP = {}; 
+        Object.values(INITIAL_GROUPS).forEach(g => g.forEach(t => TEAMS_MAP[t.id] = t));
+
+        const ALL_GROUP_FIXTURES = {}; 
+        Object.keys(INITIAL_GROUPS).forEach(g => {
+            const teams = INITIAL_GROUPS[g];
+            const f = [];
+            for (let i = 0; i < teams.length; i++) 
+                for (let j = i + 1; j < teams.length; j++) 
+                    f.push({ id: `${g}-${teams[i].id}-${teams[j].id}`, group: g, team1: teams[i], team2: teams[j] });
+            ALL_GROUP_FIXTURES[g] = f;
+        });
+
+        // --- 2. HELPERS ---
+        const b64Encode = (str) => btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (m, p) => String.fromCharCode('0x' + p)));
+        const b64Decode = (str) => decodeURIComponent(atob(str).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+
+        const calcRank = (teams, fixtures, predictions) => {
+            let stats = teams.map(t => ({ ...t, points: 0 }));
+            fixtures.forEach(m => { const w = predictions[m.id]; if(w) { const idx = stats.findIndex(s => s.id === w); if(idx>-1) stats[idx].points += 2; } });
+            return stats.sort((a, b) => b.points - a.points || a.rank - b.rank);
+        };
+
+        const calcUserSim = (matchPredictions) => {
+            if (!matchPredictions) return null;
+            const gStandings = {}; 
+            Object.keys(INITIAL_GROUPS).forEach(g => {
+                gStandings[g] = calcRank(INITIAL_GROUPS[g], ALL_GROUP_FIXTURES[g], matchPredictions);
+            });
+            return { groupStandings: gStandings };
+        };
+
+        // --- 3. COMPONENTI UI (DEFINITI ESTERNAMENTE PER IPHONE) ---
+
+        const T20Logo = ({ className }) => (
+            <svg className={className} viewBox="0 0 600 400" xmlns="http://www.w3.org/2000/svg">
+                 <defs><filter id="glow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="10 10" result="glow"/><feMerge><feMergeNode in="glow"/><feMergeNode in="glow"/></feMerge></filter></defs>
+                 <path d="M150,100 L450,100 L500,200 L450,300 L150,300 L100,200 Z" fill="#f97316" opacity="0.6" filter="url(#glow)" transform="scale(1.1) translate(-30, -10)"/>
+                 <path d="M150,100 L450,100 C480,100 500,130 500,170 L500,230 C500,270 480,300 450,300 L150,300 C120,300 100,270 100,230 L100,170 C100,130 120,100 150,100 Z" fill="#0f172a" stroke="#f97316" strokeWidth="2"/>
+                 <path d="M120,130 L200,130 L240,90 L280,130 L360,130 L400,90 L480,130 L480,150 L400,110 L360,150 L280,110 L240,150 L200,110 L120,150 Z" fill="#f97316" />
+                 <path d="M120,250 L200,250 L240,290 L280,250 L360,250 L400,290 L480,250 L480,270 L400,310 L360,270 L280,310 L240,270 L200,310 L120,270 Z" fill="#f97316" />
+                 <circle cx="300" cy="140" r="25" fill="white" stroke="#0f172a" strokeWidth="2"/>
+                 <path d="M285,135 Q300,125 315,135 Q300,155 285,145" fill="none" stroke="#0f172a" strokeWidth="3" strokeLinecap="round"/>
+                 <text x="300" y="180" fontFamily="Arial, sans-serif" fontSize="20" fontWeight="bold" textAnchor="middle" fill="white" letterSpacing="2">ICC MEN'S T20</text>
+                 <text x="300" y="225" fontFamily="Arial, sans-serif" fontSize="48" fontWeight="900" textAnchor="middle" fill="white" letterSpacing="1">WORLD CUP</text>
+                 <text x="300" y="255" fontFamily="Arial, sans-serif" fontSize="16" fontWeight="bold" textAnchor="middle" fill="white" letterSpacing="1">INDIA & SRI LANKA 2026</text>
+            </svg>
+        );
+
+        const Flag = ({ id, size = "h-4" }) => {
+            const team = TEAMS_MAP[id];
+            if(!team) return null;
+            const url = team.id === 'wi' ? "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2MCA0MCI+PHJlY3Qgd2lkdGg9IjYwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjN2EwMDM1Ii8+PGNpcmNsZSBjeD0iMzAiIGN5PSIzNSIgcj0iMTUiIGZpbGw9IiNmZmQxMDAiIG9wYWNpdHk9IjAuOCIvPjxwYXRoIGQ9Ik0zMCAxNSBMMzAgMzUgTTI1IDM1IEwzNSAzNSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIi8+PHBhdGggZD0iTTMwIDE1IEwzNSAxMCBNMzAgMTUgTDI1IDEwIiBzdHJva2U9IiNmZmQxMDAiIHN0cm9rZS13aWR0aD0iMiIvPjwvc3ZnPg==" : `https://flagcdn.com/w40/${team.code}.png`;
+            return <img src={url} className={`${size} inline-block mr-1 shadow-sm rounded-sm`} crossOrigin="anonymous" />;
+        };
+
+        const Header = ({ setPhase, phase }) => (
+            <header className="bg-[#1e293b] text-white shadow-lg border-b border-purple-900 h-16 flex items-center justify-between px-4 sticky top-0 z-50">
+                <div className="flex items-center gap-2 cursor-pointer" onClick={() => setPhase('intro')}>
+                    <div className="bg-white p-1 rounded-lg h-8 w-8 flex items-center justify-center overflow-hidden"><T20Logo className="w-full h-full" /></div>
+                    <span className="font-black text-sm uppercase tracking-tighter">T20 WC 2026</span>
+                </div>
+                <div className="flex gap-2">
+                    <button onClick={() => setPhase('admin')} className={`px-3 py-1 rounded font-bold text-[10px] uppercase ${phase === 'admin' ? 'bg-amber-600' : 'bg-amber-500'}`}>Admin</button>
+                    <button onClick={() => setPhase('leaderboard')} className={`px-3 py-1 rounded font-bold text-[10px] uppercase ${phase === 'leaderboard' ? 'bg-purple-700' : 'bg-purple-600'}`}>Ranking</button>
+                </div>
+            </header>
+        );
+
+        const Intro = ({ playerName, setPlayerName, onStart }) => (
+            <div className="flex flex-col items-center justify-center min-h-[80vh] text-center p-6 animate-fadeIn">
+                <T20Logo className="w-full max-h-[300px] md:max-h-[500px] mb-8" />
+                <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl w-full max-w-sm border border-slate-100 relative">
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Scegli il tuo Nickname</label>
+                    <div className="flex items-center bg-slate-50 border-2 border-slate-100 rounded-2xl p-2 mb-6">
+                        <span className="text-2xl px-2">🏏</span>
+                        <input 
+                            type="text" 
+                            className="w-full py-3 bg-transparent outline-none text-[#1e293b] font-bold text-center" 
+                            value={playerName} 
+                            onChange={(e) => setPlayerName(e.target.value)} 
+                            placeholder="Tuo nome..."
+                        />
+                        <span className="text-2xl px-2">🏟️</span>
+                    </div>
+                    <button 
+                        disabled={!playerName} 
+                        onClick={onStart} 
+                        className="w-full py-5 bg-gradient-to-r from-purple-600 to-indigo-700 text-white font-black rounded-2xl shadow-xl active:scale-95 disabled:opacity-50 mt-6 uppercase tracking-widest"
+                    >
+                        Inizia il Contest
+                    </button>
+                </div>
+            </div>
+        );
+
+        const MatchView = ({ predictions, onPick, onComplete }) => {
+            const allM = Object.values(ALL_GROUP_FIXTURES).flat();
+            const done = allM.filter(m => predictions[m.id]).length;
+            const isComplete = done === allM.length;
+
+            return (
+                <div className="p-4 space-y-6 pb-32 animate-fadeIn">
+                    <h2 className="text-2xl font-black text-[#1e293b] uppercase text-center">Fase Round Robin</h2>
+                    {Object.keys(ALL_GROUP_FIXTURES).map(g => (
+                        <div key={g} className="bg-white rounded-[2rem] p-4 border shadow-md">
+                            <h3 className="font-black text-purple-700 mb-3 border-b pb-2 text-center text-xs uppercase tracking-widest">Gruppo {g}</h3>
+                            <div className="space-y-2">
+                                {ALL_GROUP_FIXTURES[g].map(m => (
+                                    <div key={m.id} className="flex justify-between items-center bg-slate-50 p-1 rounded-xl">
+                                        <div onClick={()=>onPick(m.id, m.team1.id)} className={`flex-1 p-3 rounded-xl cursor-pointer transition-all ${predictions[m.id] === m.team1.id ? 'bg-white shadow ring-2 ring-purple-500' : 'active:bg-slate-200'}`}>
+                                            <Flag id={m.team1.id}/> <span className="text-[11px] font-bold">{m.team1.name} <span className="opacity-40">#{m.team1.rank}</span></span>
+                                        </div>
+                                        <div className="px-2 text-[8px] font-black opacity-20 uppercase">vs</div>
+                                        <div onClick={()=>onPick(m.id, m.team2.id)} className={`flex-1 p-3 rounded-xl text-right cursor-pointer transition-all ${predictions[m.id] === m.team2.id ? 'bg-white shadow ring-2 ring-purple-500' : 'active:bg-slate-200'}`}>
+                                            <span className="text-[11px] font-bold"><span className="opacity-40">#{m.team2.rank}</span> {m.team2.name}</span> <Flag id={m.team2.id}/>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                    <div className="fixed bottom-0 left-0 w-full p-4 bg-white/90 backdrop-blur-md border-t z-40 flex flex-col items-center shadow-lg">
+                        {!isComplete && <div className="mb-2 bg-red-500 text-white text-[10px] font-black px-4 py-1 rounded-full uppercase">Mancano {allM.length - done} match</div>}
+                        <button onClick={onComplete} disabled={!isComplete} className={`w-full max-w-md py-4 rounded-2xl font-black transition-all ${isComplete ? 'bg-purple-600 text-white active:scale-95' : 'bg-slate-200 text-slate-400'}`}>CALCOLA CLASSIFICHE</button>
+                    </div>
+                </div>
+            );
+        };
+
+        const FinalSetup = ({ champion, setChampion, setTieRuns, setTieWkts, tieRuns, tieWkts, onComplete }) => (
+            <div className="p-6 space-y-8 animate-fadeIn text-center">
+                <h2 className="text-2xl font-black uppercase text-[#1e293b]">Scelta Vincitore</h2>
+                <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border">
+                    <select className="w-full p-4 border-2 rounded-2xl font-bold bg-slate-50 mb-8" value={champion?.id || ""} onChange={(e)=>setChampion(TEAMS_MAP[e.target.value])}>
+                        <option value="">Scegli il Vincitore Mondiale...</option>
+                        {Object.values(TEAMS_MAP).sort((a,b)=>a.name.localeCompare(b.name)).map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                    
+                    {champion && (
+                        <div className="space-y-6 animate-fadeIn">
+                             <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1 text-center">
+                                    <label className="text-[9px] font-bold text-slate-400 uppercase">Runs Scarto</label>
+                                    <input type="number" className="w-full p-4 border-2 rounded-xl text-center font-bold" value={tieRuns} onChange={(e)=>setTieRuns(e.target.value)} placeholder="0"/>
+                                </div>
+                                <div className="space-y-1 text-center">
+                                    <label className="text-[9px] font-bold text-slate-400 uppercase">Wkts Risp.</label>
+                                    <input type="number" className="w-full p-4 border-2 rounded-xl text-center font-bold" value={tieWkts} onChange={(e)=>setTieWkts(e.target.value)} placeholder="0"/>
+                                </div>
+                            </div>
+                            <button onClick={onComplete} className="w-full py-5 bg-purple-600 text-white font-black rounded-2xl shadow-xl uppercase tracking-widest">CONFERMA E TERMINA</button>
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+
+        // --- 4. APP PRINCIPALE ---
+
+        function App() {
+            const [phase, setPhase] = useState('intro');
+            const [playerName, setPlayerName] = useState('');
+            const [matchPredictions, setMatchPredictions] = useState({});
+            const [groupStandings, setGroupStandings] = useState({});
+            const [champion, setChampion] = useState(null);
+            const [tieRuns, setTieRuns] = useState('');
+            const [tieWkts, setTieWkts] = useState('');
+            const [leaderboard, setLeaderboard] = useState([]);
+            const [realResults, setRealResults] = useState({ matches: {}, champion: null });
+
+            useEffect(() => {
+                const saved = localStorage.getItem('t20_leaderboard_v6');
+                if(saved) setLeaderboard(JSON.parse(saved));
+                const rr = localStorage.getItem('t20_real_results');
+                if(rr) setRealResults(JSON.parse(rr));
+            }, []);
+
+            const copyFinalCode = () => {
+                const data = { n: playerName, cid: champion?.id, mp: matchPredictions, tr: tieRuns, tw: tieWkts, d: new Date().toLocaleDateString() };
+                const code = 'T20-' + b64Encode(JSON.stringify(data));
+                const el = document.createElement('textarea');
+                el.value = code; document.body.appendChild(el); el.select();
+                try {
+                    document.execCommand('copy');
+                    alert("CODICE COPIATO! ✅\nIncollalo nella chat dell'admin.");
+                } catch(e) { alert("Copia manuale richiesta."); }
+                document.body.removeChild(el);
+            };
+
+            return (
+                <div className="min-h-screen flex flex-col pb-10">
+                    <Header setPhase={setPhase} phase={phase} />
+                    
+                    <main className="flex-grow w-full max-w-4xl mx-auto">
+                        {phase === 'intro' && <Intro playerName={playerName} setPlayerName={setPlayerName} onStart={()=>setPhase('matches')} />}
+                        
+                        {phase === 'matches' && (
+                            <MatchView 
+                                predictions={matchPredictions} 
+                                onPick={(mid, wid)=>setMatchPredictions(p=>({...p, [mid]: wid}))}
+                                onComplete={() => {
+                                    const s = {}; Object.keys(INITIAL_GROUPS).forEach(g => s[g] = calcRank(INITIAL_GROUPS[g], ALL_GROUP_FIXTURES[g], matchPredictions));
+                                    setGroupStandings(s); setPhase('final_setup');
+                                }}
+                            />
+                        )}
+
+                        {phase === 'final_setup' && <FinalSetup champion={champion} setChampion={setChampion} tieRuns={tieRuns} setTieRuns={setTieRuns} tieWkts={tieWkts} setTieWkts={setTieWkts} onComplete={()=>setPhase('summary')} />}
+
+                        {phase === 'summary' && (
+                            <div className="p-6 text-center space-y-8 animate-fadeIn">
+                                <div className="bg-white rounded-[3rem] shadow-2xl border overflow-hidden max-w-md mx-auto">
+                                    <div className="bg-[#0f172a] p-8 text-white">
+                                        <div className="text-5xl mb-4">🏆</div>
+                                        <h2 className="text-2xl font-black uppercase tracking-tighter">Contest Completato</h2>
+                                        <p className="text-purple-400 text-xs font-bold mt-1 uppercase tracking-widest">{playerName}</p>
+                                    </div>
+                                    <div className="p-8 space-y-8">
+                                        <div className="text-center">
+                                            <span className="text-[9px] font-black text-purple-700 bg-purple-50 px-4 py-1.5 rounded-full uppercase">Il Mio Campione</span>
+                                            <div className="text-3xl font-black text-[#0f172a] mt-4 uppercase">{champion?.name}</div>
+                                        </div>
+                                        <button onClick={copyFinalCode} className="w-full py-5 bg-green-600 hover:bg-green-700 text-white font-black rounded-2xl shadow-lg active:scale-95 transition-all uppercase tracking-widest">COPIA CODICE</button>
+                                    </div>
+                                </div>
+                                <button onClick={()=>setPhase('intro')} className="text-slate-400 text-[10px] font-bold uppercase underline">Torna alla Home</button>
+                            </div>
+                        )}
+
+                        {phase === 'admin' && (
+                            <div className="p-6 animate-fadeIn space-y-6">
+                                <h2 className="text-xl font-black text-center uppercase">Area Riservata</h2>
+                                <div className="bg-white p-6 rounded-3xl shadow border">
+                                    <textarea id="admin_i" className="w-full h-32 p-4 border rounded-2xl text-[10px] font-mono mb-4 bg-slate-50" placeholder="Incolla codice T20-..."></textarea>
+                                    <button onClick={()=>{
+                                        try {
+                                            const v = document.getElementById('admin_i').value;
+                                            const d = JSON.parse(b64Decode(v.trim().replace('T20-','')));
+                                            const u = [...leaderboard.filter(x=>x.n!==d.n), d];
+                                            setLeaderboard(u); localStorage.setItem('t20_leaderboard_v6', JSON.stringify(u));
+                                            alert("Dati importati!"); document.getElementById('admin_i').value="";
+                                        } catch(e){ alert("Errore nel codice."); }
+                                    }} className="w-full py-4 bg-green-600 text-white font-bold rounded-2xl uppercase">Carica Giocatore</button>
+                                    <button onClick={()=>{if(confirm('Azzero tutto?')){setLeaderboard([]);localStorage.removeItem('t20_leaderboard_v6');}}} className="w-full mt-4 text-red-500 font-bold text-xs uppercase underline text-center">Resetta Classifica Locale</button>
+                                </div>
+                            </div>
+                        )}
+
+                        {phase === 'leaderboard' && (
+                            <div className="p-6 animate-fadeIn space-y-6 text-center">
+                                <h2 className="text-2xl font-black text-center uppercase tracking-tighter">Ranking</h2>
+                                <div className="bg-white rounded-3xl shadow-xl overflow-hidden divide-y text-left">
+                                    {leaderboard.map((e,i) => (
+                                        <div key={i} className="p-5 flex justify-between items-center hover:bg-slate-50 transition-all">
+                                            <div className="flex-1">
+                                                <div className="font-black text-[#0f172a] uppercase">{e.n}</div>
+                                                <div className="text-[10px] text-slate-400">🏆 {TEAMS_MAP[e.cid]?.name}</div>
+                                            </div>
+                                            <div className="text-right">
+                                                 <button onClick={()=>alert(`Runs: ${e.tr}\nWkts: ${e.tw}`)} className="bg-purple-100 text-purple-700 px-4 py-1.5 rounded-full font-bold text-[10px] uppercase">Vedi Tie</button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {leaderboard.length===0 && <div className="p-10 text-slate-400 text-center italic text-xs">Classifica vuota.</div>}
+                                </div>
+                            </div>
+                        )}
+                    </main>
+                    <footer className="py-8 text-center text-slate-300 text-[10px] font-black uppercase tracking-[0.5em] mt-auto">ICC Men's T20 World Cup</footer>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
