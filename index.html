@@ -151,7 +151,7 @@
             return stats.sort((a, b) => b.points - a.points || a.rank - b.rank);
         };
 
-        // NUOVA LOGICA PUNTEGGIO
+        // CALCOLO PUNTEGGIO CON LOGICA RANKING + BONUS U/O
         const calculateTotalScore = (player, real) => {
             let score = 0;
             if (!real || !player.matchPredictions) return 0;
@@ -162,25 +162,23 @@
 
                 if (!playerPred || !realRes) return;
 
-                // CONDIZIONE PRIMARIA: Indovinare il vincitore
+                // CONDIZIONE PRIMARIA: Indovinare il vincitore per sbloccare i punti
                 if (playerPred.w === realRes.w) {
-                    // 1. Punti pari al valore del ranking della squadra vincente
                     const winningTeam = TEAMS_MAP[realRes.w];
-                    if (winningTeam) score += winningTeam.rank;
+                    if (winningTeam) score += winningTeam.rank; // Punti pari al ranking
 
-                    // 2. Bonus Total Runs (25 punti se indovinato)
+                    // Bonus Total Runs (25 punti se indovinato)
                     if (realRes.r && playerPred.r === realRes.r) {
                         score += 25;
                     }
 
-                    // 3. Bonus Total Wickets (25 punti se indovinato)
+                    // Bonus Total Wickets (25 punti se indovinato)
                     if (realRes.wk && playerPred.wk === realRes.wk) {
                         score += 25;
                     }
                 }
             });
 
-            // Bonus Campione del Mondo (fisso 50 punti o altro? mantengo la logica precedente)
             if (real.champion && player.champion?.id === real.champion) {
                 score += 50; 
             }
@@ -276,61 +274,70 @@
                     <div className="text-center space-y-4">
                         <h2 className="text-5xl font-black title-font text-white italic tracking-tighter uppercase">{title}</h2>
                         <div className="h-1.5 w-24 bg-orange-500 mx-auto rounded-full"></div>
-                        <p className="text-[10px] uppercase font-black text-slate-500 tracking-widest">Scegli Vincitore, Runs (U/O 165.5) e Wickets (U/O 6.5)</p>
+                        <p className="text-[10px] uppercase font-black text-slate-500 tracking-widest leading-relaxed">
+                            Indovina il vincitore per sbloccare i punti ranking.<br/>
+                            Bonus: +25 PT se indovini anche l'Under/Over (Runs e Wickets).
+                        </p>
                     </div>
-                    {Object.keys(fixtures).map(g => (
-                        <div key={g} className="space-y-8">
-                            <div className="flex items-center gap-6">
-                                <h3 className="font-black text-orange-500 uppercase tracking-widest text-sm italic">
-                                    {g.includes('S8') ? `Super 8 - GRUPPO ${g.slice(-1)}` : `GIRONE ${g}`}
-                                </h3>
-                                <div className="h-px bg-white/10 flex-1"></div>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {fixtures[g].map(m => {
-                                    const pred = predictions[m.id] || {};
-                                    return (
-                                        <div key={m.id} className="match-card rounded-[2.5rem] p-4 flex flex-col gap-4 shadow-lg">
-                                            <div className="flex items-center justify-between gap-2">
-                                                <div onClick={()=>onPick(m.id, 'w', m.team1.id)} className={`flex-1 flex items-center gap-3 p-3 rounded-[1.5rem] cursor-pointer transition-all ${pred.w === m.team1.id ? 'selected-winner' : 'hover:bg-white/5'}`}>
-                                                    <Flag id={m.team1.id} size="h-6"/> 
-                                                    <div className="flex flex-col text-left">
-                                                        <span className="team-label">{m.team1.name}</span>
-                                                        <span className={`text-[8px] font-black uppercase ${pred.w === m.team1.id ? 'text-white' : 'text-orange-500'}`}>Rank #{m.team1.rank}</span>
+                    {Object.keys(fixtures).map(g => {
+                        // Determina soglia runs: 340.5 per Round Robin (A,B,C,D), 350.5 per gli altri
+                        const runsThreshold = (['A','B','C','D'].includes(g)) ? "340.5" : "350.5";
+                        const wktsThreshold = "13.5";
+
+                        return (
+                            <div key={g} className="space-y-8">
+                                <div className="flex items-center gap-6">
+                                    <h3 className="font-black text-orange-500 uppercase tracking-widest text-sm italic">
+                                        {g.includes('S8') ? `Super 8 - GRUPPO ${g.slice(-1)}` : `GIRONE ${g}`}
+                                    </h3>
+                                    <div className="h-px bg-white/10 flex-1"></div>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    {fixtures[g].map(m => {
+                                        const pred = predictions[m.id] || {};
+                                        return (
+                                            <div key={m.id} className="match-card rounded-[2.5rem] p-4 flex flex-col gap-4 shadow-lg">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <div onClick={()=>onPick(m.id, 'w', m.team1.id)} className={`flex-1 flex items-center gap-3 p-3 rounded-[1.5rem] cursor-pointer transition-all ${pred.w === m.team1.id ? 'selected-winner' : 'hover:bg-white/5'}`}>
+                                                        <Flag id={m.team1.id} size="h-6"/> 
+                                                        <div className="flex flex-col text-left">
+                                                            <span className="team-label">{m.team1.name}</span>
+                                                            <span className={`text-[8px] font-black uppercase ${pred.w === m.team1.id ? 'text-white' : 'text-orange-500'}`}>Rank #{m.team1.rank}</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="px-2 font-black text-slate-700 text-[9px] italic">VS</div>
+                                                    <div onClick={()=>onPick(m.id, 'w', m.team2.id)} className={`flex-1 flex items-center justify-end gap-3 p-3 rounded-[1.5rem] text-right cursor-pointer transition-all ${pred.w === m.team2.id ? 'selected-winner' : 'hover:bg-white/5'}`}>
+                                                        <div className="flex flex-col text-right">
+                                                            <span className="team-label">{m.team2.name}</span>
+                                                            <span className={`text-[8px] font-black uppercase ${pred.w === m.team2.id ? 'text-white' : 'text-orange-500'}`}>Rank #{m.team2.rank}</span>
+                                                        </div>
+                                                        <Flag id={m.team2.id} size="h-6"/>
                                                     </div>
                                                 </div>
-                                                <div className="px-2 font-black text-slate-700 text-[9px] italic">VS</div>
-                                                <div onClick={()=>onPick(m.id, 'w', m.team2.id)} className={`flex-1 flex items-center justify-end gap-3 p-3 rounded-[1.5rem] text-right cursor-pointer transition-all ${pred.w === m.team2.id ? 'selected-winner' : 'hover:bg-white/5'}`}>
-                                                    <div className="flex flex-col text-right">
-                                                        <span className="team-label">{m.team2.name}</span>
-                                                        <span className={`text-[8px] font-black uppercase ${pred.w === m.team2.id ? 'text-white' : 'text-orange-500'}`}>Rank #{m.team2.rank}</span>
+                                                
+                                                <div className="flex gap-4 border-t border-white/5 pt-3">
+                                                    <div className="flex-1 flex flex-col gap-1">
+                                                        <span className="text-[8px] font-black text-slate-600 uppercase text-center mb-1">Total Runs ({runsThreshold})</span>
+                                                        <div className="flex gap-1 justify-center">
+                                                            <button onClick={()=>onPick(m.id, 'r', 'under')} className={`uo-btn flex-1 ${pred.r === 'under' ? 'active' : ''}`}>Under</button>
+                                                            <button onClick={()=>onPick(m.id, 'r', 'over')} className={`uo-btn flex-1 ${pred.r === 'over' ? 'active' : ''}`}>Over</button>
+                                                        </div>
                                                     </div>
-                                                    <Flag id={m.team2.id} size="h-6"/>
+                                                    <div className="flex-1 flex flex-col gap-1">
+                                                        <span className="text-[8px] font-black text-slate-600 uppercase text-center mb-1">Total Wkts ({wktsThreshold})</span>
+                                                        <div className="flex gap-1 justify-center">
+                                                            <button onClick={()=>onPick(m.id, 'wk', 'under')} className={`uo-btn flex-1 ${pred.wk === 'under' ? 'active' : ''}`}>Under</button>
+                                                            <button onClick={()=>onPick(m.id, 'wk', 'over')} className={`uo-btn flex-1 ${pred.wk === 'over' ? 'active' : ''}`}>Over</button>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
-                                            
-                                            <div className="flex gap-4 border-t border-white/5 pt-3">
-                                                <div className="flex-1 flex flex-col gap-1">
-                                                    <span className="text-[8px] font-black text-slate-600 uppercase text-center mb-1">Runs (165.5)</span>
-                                                    <div className="flex gap-1 justify-center">
-                                                        <button onClick={()=>onPick(m.id, 'r', 'under')} className={`uo-btn flex-1 ${pred.r === 'under' ? 'active' : ''}`}>U</button>
-                                                        <button onClick={()=>onPick(m.id, 'r', 'over')} className={`uo-btn flex-1 ${pred.r === 'over' ? 'active' : ''}`}>O</button>
-                                                    </div>
-                                                </div>
-                                                <div className="flex-1 flex flex-col gap-1">
-                                                    <span className="text-[8px] font-black text-slate-600 uppercase text-center mb-1">Wkts (6.5)</span>
-                                                    <div className="flex gap-1 justify-center">
-                                                        <button onClick={()=>onPick(m.id, 'wk', 'under')} className={`uo-btn flex-1 ${pred.wk === 'under' ? 'active' : ''}`}>U</button>
-                                                        <button onClick={()=>onPick(m.id, 'wk', 'over')} className={`uo-btn flex-1 ${pred.wk === 'over' ? 'active' : ''}`}>O</button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )
-                                })}
+                                        )
+                                    })}
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                     <div className="fixed bottom-0 left-0 w-full p-6 glass-card border-t border-white/10 z-40 flex flex-col items-center">
                         <button onClick={() => isComplete && onComplete()} className={`w-full max-w-md py-5 rounded-2xl font-black uppercase transition-all shadow-2xl ${isComplete ? 'orange-button text-white active:scale-95' : 'bg-white/5 text-slate-600 cursor-not-allowed'}`}>
                             {nextLabel}
@@ -371,7 +378,7 @@
                     ))}
                 </div>
                 <div className="fixed bottom-0 left-0 w-full p-8 glass-card z-40 border-t border-white/10">
-                    <button onClick={nextAction} className="w-full max-w-md py-5 orange-button text-white font-black rounded-3xl shadow-2xl uppercase tracking-widest active:scale-95 transition-all text-xs">
+                    <button onClick={nextAction} className="w-full max-w-md py-5 orange-button text-white font-black rounded-3xl shadow-2xl uppercase tracking-widest active:scale-95 transition-all text-sm">
                         {nextLabel} ➡️
                     </button>
                 </div>
@@ -413,14 +420,14 @@
                             `GIRONE ${g}`,
                             `${m.team1.name} vs ${m.team2.name}`,
                             pred.w ? TEAMS_MAP[pred.w].name.toUpperCase() : "---",
-                            `R: ${pred.r?.toUpperCase() || "?"} | W: ${pred.wk?.toUpperCase() || "?"}`
+                            `Runs: ${pred.r?.toUpperCase() || "?"} (340.5) | Wkts: ${pred.wk?.toUpperCase() || "?"} (13.5)`
                         ]);
                     });
                 });
 
                 doc.autoTable({
                     startY: 95,
-                    head: [['Fase', 'Incontro', 'Vincitore', 'Bonus (R|W)']],
+                    head: [['Fase', 'Incontro', 'Vincitore', 'Pronostici U/O Bonus']],
                     body: groupRows,
                     theme: 'striped',
                     headStyles: { fillColor: titleColor },
@@ -435,7 +442,7 @@
                             g.includes('G1') ? 'S8 GRUPPO 1' : 'S8 GRUPPO 2',
                             `${m.team1.name} vs ${m.team2.name}`,
                             pred.w ? TEAMS_MAP[pred.w].name.toUpperCase() : "---",
-                            `R: ${pred.r?.toUpperCase() || "?"} | W: ${pred.wk?.toUpperCase() || "?"}`
+                            `Runs: ${pred.r?.toUpperCase() || "?"} (350.5) | Wkts: ${pred.wk?.toUpperCase() || "?"}`
                         ]);
                     });
                 });
@@ -443,7 +450,7 @@
                 if (s8Rows.length > 0) {
                     doc.autoTable({
                         startY: doc.lastAutoTable.finalY + 10,
-                        head: [['Fase Super 8', 'Incontro', 'Vincitore', 'Bonus (R|W)']],
+                        head: [['Fase Super 8', 'Incontro', 'Vincitore', 'Pronostici U/O Bonus']],
                         body: s8Rows,
                         theme: 'striped',
                         headStyles: { fillColor: [56, 189, 248] },
@@ -468,8 +475,8 @@
                                 <div className="text-5xl font-black text-white title-font italic tracking-tighter leading-none">{champion?.name}</div>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
-                                <div className="bg-white/5 p-6 rounded-[2rem] border border-white/10"><div className="text-[9px] font-black text-slate-500 uppercase mb-2">Runs</div><div className="text-4xl font-black text-orange-500 italic">{tieRuns}</div></div>
-                                <div className="bg-white/5 p-6 rounded-[2rem] border border-white/10"><div className="text-[9px] font-black text-slate-500 uppercase mb-2">Wkts</div><div className="text-4xl font-black text-orange-500 italic">{tieWkts}</div></div>
+                                <div className="bg-white/5 p-6 rounded-[2rem] border border-white/10"><div className="text-[9px] font-black text-slate-500 uppercase mb-2">Runs Scarto</div><div className="text-4xl font-black text-orange-500 italic">{tieRuns}</div></div>
+                                <div className="bg-white/5 p-6 rounded-[2rem] border border-white/10"><div className="text-[9px] font-black text-slate-500 uppercase mb-2">Wkts Risp.</div><div className="text-4xl font-black text-orange-500 italic">{tieWkts}</div></div>
                             </div>
                             <div className="space-y-4">
                                 <button onClick={copyCode} className="w-full py-6 orange-button text-white font-black rounded-[2rem] uppercase tracking-widest shadow-2xl active:scale-95 text-xs">COPIA CODICE PER ADMIN</button>
@@ -610,8 +617,10 @@
                 );
             };
 
-            const AdminMatchRow = ({ m, id }) => {
+            const AdminMatchRow = ({ m, id, phaseGroup }) => {
                 const res = realResults.matches?.[id] || {};
+                const runsThreshold = (['A','B','C','D'].includes(phaseGroup)) ? "340.5" : "350.5";
+                
                 return (
                     <div className="admin-match-row flex flex-col gap-3">
                         <div className="flex justify-between items-center text-sm gap-2">
@@ -629,12 +638,12 @@
                         </div>
                         <div className="flex gap-4 px-2">
                             <div className="flex-1 flex gap-1 justify-center items-center">
-                                <span className="text-[7px] font-black text-slate-500 uppercase mr-2">Runs</span>
+                                <span className="text-[7px] font-black text-slate-500 uppercase mr-1">Runs ({runsThreshold})</span>
                                 <button onClick={()=>updateResult(id, 'r', 'under')} className={`uo-btn flex-1 ${res.r === 'under' ? 'active' : ''}`}>U</button>
                                 <button onClick={()=>updateResult(id, 'r', 'over')} className={`uo-btn flex-1 ${res.r === 'over' ? 'active' : ''}`}>O</button>
                             </div>
                             <div className="flex-1 flex gap-1 justify-center items-center">
-                                <span className="text-[7px] font-black text-slate-500 uppercase mr-2">Wkts</span>
+                                <span className="text-[7px] font-black text-slate-500 uppercase mr-1">Wkts (13.5)</span>
                                 <button onClick={()=>updateResult(id, 'wk', 'under')} className={`uo-btn flex-1 ${res.wk === 'under' ? 'active' : ''}`}>U</button>
                                 <button onClick={()=>updateResult(id, 'wk', 'over')} className={`uo-btn flex-1 ${res.wk === 'over' ? 'active' : ''}`}>O</button>
                             </div>
@@ -701,20 +710,20 @@
                                 {resultStage === 'groups' && Object.keys(ALL_GROUP_FIXTURES).map(g => (
                                     <div key={g} className="space-y-4">
                                         <h4 className="text-orange-500 font-black uppercase text-xs italic border-b border-orange-500/20 pb-2">Girone {g}</h4>
-                                        {ALL_GROUP_FIXTURES[g].map(m => <AdminMatchRow key={m.id} m={m} id={m.id} />)}
+                                        {ALL_GROUP_FIXTURES[g].map(m => <AdminMatchRow key={m.id} m={m} id={m.id} phaseGroup={g} />)}
                                     </div>
                                 ))}
 
                                 {resultStage === 'super8' && Object.keys(realS8Fixtures).map(gk => (
                                     <div key={gk} className="space-y-4">
                                         <h4 className="text-orange-500 font-black uppercase text-xs italic border-b border-orange-500/20 pb-2">SUPER 8 - {gk}</h4>
-                                        {realS8Fixtures[gk].map(m => <AdminMatchRow key={m.id} m={m} id={m.id} />)}
+                                        {realS8Fixtures[gk].map(m => <AdminMatchRow key={m.id} m={m} id={m.id} phaseGroup={gk} />)}
                                     </div>
                                 ))}
 
                                 {resultStage === 'finals' && (
                                     <div className="space-y-8">
-                                        {realFinalists.map(f => f.team1 && f.team2 && <AdminMatchRow key={f.id} m={f} id={f.id} />)}
+                                        {realFinalists.map(f => f.team1 && f.team2 && <AdminMatchRow key={f.id} m={f} id={f.id} phaseGroup="knockout" />)}
                                         <div className="pt-4 border-t border-white/5">
                                             <label className="block text-[10px] font-black text-orange-500 uppercase text-center mb-2">Vincitore Mondiale</label>
                                             <select className="w-full p-4 bg-white/5 border border-white/10 rounded-2xl font-black text-orange-500 outline-none text-center uppercase italic" value={realResults.champion || ""} onChange={(e)=>setFinalResult('champion', e.target.value)}>
@@ -776,7 +785,9 @@
                 try {
                     document.execCommand('copy');
                     notify("CODICE COPIATO! ✅ Incollalo nella chat dell'admin.");
-                } catch(e) { notify("Errore copia ❌"); }
+                } catch(e) {
+                    notify("Errore copia ❌");
+                }
                 document.body.removeChild(el);
             };
 
@@ -878,7 +889,7 @@
                                                     <div className="max-w-xs mx-auto space-y-4">
                                                         <div className="grid grid-cols-2 gap-4">
                                                             <div><label className="text-[9px] font-black text-slate-500 uppercase italic">Runs Scarto</label><input type="number" className="w-full p-4 bg-white/5 border border-white/10 rounded-xl text-center font-black" value={tieRuns} onChange={e=>setTieRuns(e.target.value)}/></div>
-                                                            <div><label className="text-[9px] font-black text-slate-500 uppercase italic">Wkts Scarto</label><input type="number" className="w-full p-4 bg-white/5 border border-white/10 rounded-xl text-center font-black" value={tieWkts} onChange={e=>setTieWkts(e.target.value)}/></div>
+                                                            <div><label className="text-[9px] font-black text-slate-500 uppercase italic">Wkts Risp.</label><input type="number" className="w-full p-4 bg-white/5 border border-white/10 rounded-xl text-center font-black" value={tieWkts} onChange={e=>setTieWkts(e.target.value)}/></div>
                                                         </div>
                                                         <button onClick={()=>setPhase(PHASES.SUMMARY)} className="w-full py-5 orange-button text-white font-black rounded-2xl uppercase shadow-2xl text-xs tracking-widest">Concludi Pronostico</button>
                                                     </div>
