@@ -151,7 +151,6 @@
             return stats.sort((a, b) => b.points - a.points || a.rank - b.rank);
         };
 
-        // CALCOLO PUNTEGGIO CON LOGICA RANKING + BONUS U/O
         const calculateTotalScore = (player, real) => {
             let score = 0;
             if (!real || !player.matchPredictions) return 0;
@@ -162,17 +161,14 @@
 
                 if (!playerPred || !realRes) return;
 
-                // CONDIZIONE PRIMARIA: Indovinare il vincitore per sbloccare i punti
                 if (playerPred.w === realRes.w) {
                     const winningTeam = TEAMS_MAP[realRes.w];
-                    if (winningTeam) score += winningTeam.rank; // Punti pari al ranking
+                    if (winningTeam) score += winningTeam.rank;
 
-                    // Bonus Total Runs (25 punti se indovinato)
                     if (realRes.r && playerPred.r === realRes.r) {
                         score += 25;
                     }
 
-                    // Bonus Total Wickets (25 punti se indovinato)
                     if (realRes.wk && playerPred.wk === realRes.wk) {
                         score += 25;
                     }
@@ -246,7 +242,7 @@
                             <label className="block text-[10px] font-black text-orange-400 uppercase tracking-[0.2em]">Inserisci il tuo Nickname</label>
                             <input 
                                 type="text" 
-                                className="w-full py-5 px-6 bg-white/5 border border-white/10 rounded-2xl text-white font-black text-center focus:border-orange-500 transition-colors outline-none uppercase" 
+                                className="w-full py-5 px-6 bg-white/5 border border-white/10 rounded-2xl text-white font-black text-center focus:border-orange-500 transition-colors outline-none uppercase placeholder:text-slate-600" 
                                 value={playerName} 
                                 onChange={(e) => setPlayerName(e.target.value)} 
                                 placeholder=""
@@ -280,7 +276,6 @@
                         </p>
                     </div>
                     {Object.keys(fixtures).map(g => {
-                        // Determina soglia runs: 340.5 per Round Robin (A,B,C,D), 350.5 per gli altri
                         const runsThreshold = (['A','B','C','D'].includes(g)) ? "340.5" : "350.5";
                         const wktsThreshold = "13.5";
 
@@ -442,7 +437,7 @@
                             g.includes('G1') ? 'S8 GRUPPO 1' : 'S8 GRUPPO 2',
                             `${m.team1.name} vs ${m.team2.name}`,
                             pred.w ? TEAMS_MAP[pred.w].name.toUpperCase() : "---",
-                            `Runs: ${pred.r?.toUpperCase() || "?"} (350.5) | Wkts: ${pred.wk?.toUpperCase() || "?"}`
+                            `Runs: ${pred.r?.toUpperCase() || "?"} (350.5) | Wkts: ${pred.wk?.toUpperCase() || "?"} (13.5)`
                         ]);
                     });
                 });
@@ -457,6 +452,22 @@
                         styles: { fontSize: 7 }
                     });
                 }
+
+                // Aggiunta finali al PDF
+                const finalRows = [
+                    ['SEMIFINALE 1', matchPredictions['semi1']?.w ? TEAMS_MAP[matchPredictions['semi1'].w].name.toUpperCase() : '---', `Runs: ${matchPredictions['semi1']?.r?.toUpperCase()} | Wkts: ${matchPredictions['semi1']?.wk?.toUpperCase()}`],
+                    ['SEMIFINALE 2', matchPredictions['semi2']?.w ? TEAMS_MAP[matchPredictions['semi2'].w].name.toUpperCase() : '---', `Runs: ${matchPredictions['semi2']?.r?.toUpperCase()} | Wkts: ${matchPredictions['semi2']?.wk?.toUpperCase()}`],
+                    ['FINALISSIMA', champion?.name.toUpperCase() || '---', `Runs: ${matchPredictions['final_match']?.r?.toUpperCase()} | Wkts: ${matchPredictions['final_match']?.wk?.toUpperCase()}`]
+                ];
+
+                doc.autoTable({
+                    startY: doc.lastAutoTable.finalY + 10,
+                    head: [['Fase Finale', 'Squadra Scelta', 'U/O (350.5 | 13.5)']],
+                    body: finalRows,
+                    theme: 'grid',
+                    headStyles: { fillColor: accentColor },
+                    styles: { fontSize: 7 }
+                });
 
                 doc.save(`Pronostico_T20_2026_${playerName}.pdf`);
             };
@@ -814,80 +825,80 @@
                         
                         {phase !== PHASES.INTRO && (
                             <div className="w-full flex-grow">
-                                {phase === PHASES.MATCHES && (
-                                    <MatchView 
-                                        fixtures={ALL_GROUP_FIXTURES} predictions={matchPredictions} 
-                                        onPick={onPick}
-                                        onComplete={() => {
-                                            const s = {}; Object.keys(INITIAL_GROUPS).forEach(g => s[g] = calcRank(INITIAL_GROUPS[g], ALL_GROUP_FIXTURES[g], matchPredictions));
-                                            setGroupStandings(s); setPhase(PHASES.STANDINGS);
-                                        }}
-                                        title="Fase a Gironi" nextLabel="Vedi Classifiche"
-                                    />
-                                )}
-                                {phase === PHASES.STANDINGS && (
-                                    <StandingsView 
-                                        standings={groupStandings} title="Classifiche Gironi" nextLabel="Vai ai Super 8" 
-                                        nextAction={() => {
-                                            const G1 = [groupStandings.A[0], groupStandings.B[1], groupStandings.C[0], groupStandings.D[1]].filter(Boolean);
-                                            const G2 = [groupStandings.A[1], groupStandings.B[0], groupStandings.C[1], groupStandings.D[0]].filter(Boolean);
-                                            setSuper8Groups({ G1, G2 });
-                                            setSuper8Fixtures({ S8G1: generateFixtures(G1, 'S8G1'), S8G2: generateFixtures(G2, 'S8G2') });
-                                            setPhase(PHASES.SUPER8_MATCHES);
-                                        }} 
-                                    />
-                                )}
-                                {phase === PHASES.SUPER8_MATCHES && (
-                                    <MatchView 
-                                        fixtures={super8Fixtures} predictions={matchPredictions}
-                                        onPick={onPick}
-                                        title="Fase Super 8" nextLabel="Vedi Classifiche S8"
-                                        onComplete={() => {
-                                            setSuper8Standings({ 
-                                                S8G1: calcRank(super8Groups.G1, super8Fixtures.S8G1, matchPredictions), 
-                                                S8G2: calcRank(super8Groups.G2, super8Fixtures.S8G2, matchPredictions) 
-                                            });
-                                            setPhase(PHASES.SUPER8_STANDINGS);
-                                        }}
-                                    />
-                                )}
-                                {phase === PHASES.SUPER8_STANDINGS && (
-                                    <StandingsView standings={super8Standings} title="Super 8 Ranking" nextLabel="Vai alle Finali" nextAction={() => setPhase(PHASES.SEMIS_FINAL)} />
-                                )}
+                                {phase === PHASES.MATCHES && <MatchView fixtures={ALL_GROUP_FIXTURES} predictions={matchPredictions} onPick={onPick} onComplete={() => { const s = {}; Object.keys(INITIAL_GROUPS).forEach(g => s[g] = calcRank(INITIAL_GROUPS[g], ALL_GROUP_FIXTURES[g], matchPredictions)); setGroupStandings(s); setPhase(PHASES.STANDINGS); }} title="Fase a Gironi" nextLabel="Vedi Classifiche" />}
+                                {phase === PHASES.STANDINGS && <StandingsView standings={groupStandings} title="Classifiche Gironi" nextLabel="Vai ai Super 8" nextAction={() => { const G1 = [groupStandings.A[0], groupStandings.B[1], groupStandings.C[0], groupStandings.D[1]].filter(Boolean); const G2 = [groupStandings.A[1], groupStandings.B[0], groupStandings.C[1], groupStandings.D[0]].filter(Boolean); setSuper8Groups({ G1, G2 }); setSuper8Fixtures({ S8G1: generateFixtures(G1, 'S8G1'), S8G2: generateFixtures(G2, 'S8G2') }); setPhase(PHASES.SUPER8_MATCHES); }} />}
+                                {phase === PHASES.SUPER8_MATCHES && <MatchView fixtures={super8Fixtures} predictions={matchPredictions} onPick={onPick} title="Fase Super 8" nextLabel="Vedi Classifiche S8" onComplete={() => { setSuper8Standings({ S8G1: calcRank(super8Groups.G1, super8Fixtures.S8G1, matchPredictions), S8G2: calcRank(super8Groups.G2, super8Fixtures.S8G2, matchPredictions) }); setPhase(PHASES.SUPER8_STANDINGS); }} />}
+                                {phase === PHASES.SUPER8_STANDINGS && <StandingsView standings={super8Standings} title="Super 8 Ranking" nextLabel="Vai alle Finali" nextAction={() => setPhase(PHASES.SEMIS_FINAL)} />}
                                 {phase === PHASES.SEMIS_FINAL && (
                                     <div className="py-32 px-4 space-y-16 animate-fadeIn max-w-5xl mx-auto text-center flex-grow">
                                         <h2 className="text-6xl font-black title-font text-white italic tracking-tighter uppercase">The Knockouts</h2>
                                         <div className="grid md:grid-cols-2 gap-8">
                                             {[
-                                                { title: "Semi 1 (1°G1 vs 2°G2)", teams: [super8Standings.S8G1[0], super8Standings.S8G2[1]], idx: 0 },
-                                                { title: "Semi 2 (1°G2 vs 2°G1)", teams: [super8Standings.S8G2[0], super8Standings.S8G1[1]], idx: 1 }
-                                            ].map(s => (
-                                                <div key={s.idx} className="glass-card p-8 rounded-[3rem] shadow-2xl space-y-6 border border-white/5">
+                                                { title: "Semi 1 (1°G1 vs 2°G2)", teams: [super8Standings.S8G1[0], super8Standings.S8G2[1]], id: "semi1" },
+                                                { title: "Semi 2 (1°G2 vs 2°G1)", teams: [super8Standings.S8G2[0], super8Standings.S8G1[1]], id: "semi2" }
+                                            ].map((s, sIdx) => (
+                                                <div key={s.id} className="glass-card p-8 rounded-[3rem] shadow-2xl space-y-6 border border-white/5">
                                                     <div className="text-[10px] font-black text-orange-500 uppercase italic">{s.title}</div>
-                                                    <div className="space-y-3">
-                                                        {s.teams.map(t => t && (
-                                                            <button key={t.id} onClick={()=>setSemiWinners(prev => {const n=[...prev]; n[s.idx]=t; return n;})} className={`w-full p-4 rounded-2xl flex justify-between items-center border-2 transition-all ${semiWinners[s.idx]?.id === t.id ? 'border-orange-500 bg-orange-500 text-white shadow-lg' : 'border-white/5 bg-white/5 text-slate-400'}`}>
-                                                                <div className="flex flex-col text-left"><span className="team-label">{t.name}</span><span className="text-[8px] font-black uppercase italic">Rank #{t.rank}</span></div> <Flag id={t.id} size="h-6"/>
-                                                            </button>
-                                                        ))}
+                                                    <div className="space-y-4">
+                                                        <div className="space-y-2">
+                                                            {s.teams.map(t => t && (
+                                                                <button key={t.id} onClick={() => { const nw = [...semiWinners]; nw[sIdx] = t; setSemiWinners(nw); onPick(s.id, 'w', t.id); }} className={`w-full p-4 rounded-2xl flex justify-between items-center border-2 transition-all ${matchPredictions[s.id]?.w === t.id ? 'border-orange-500 bg-orange-500 text-white shadow-lg' : 'border-white/5 bg-white/5 text-slate-400'}`}>
+                                                                    <div className="flex flex-col text-left"><span className="team-label">{t.name}</span><span className="text-[8px] font-black uppercase italic">Rank #{t.rank}</span></div> <Flag id={t.id} size="h-6"/>
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                        {matchPredictions[s.id]?.w && (
+                                                            <div className="flex gap-4 pt-4 border-t border-white/5">
+                                                                <div className="flex-1 space-y-1">
+                                                                    <span className="text-[8px] font-black text-slate-500 uppercase">Runs (350.5)</span>
+                                                                    <div className="flex gap-1">
+                                                                        <button onClick={() => onPick(s.id, 'r', 'under')} className={`uo-btn flex-1 ${matchPredictions[s.id]?.r === 'under' ? 'active' : ''}`}>U</button>
+                                                                        <button onClick={() => onPick(s.id, 'r', 'over')} className={`uo-btn flex-1 ${matchPredictions[s.id]?.r === 'over' ? 'active' : ''}`}>O</button>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex-1 space-y-1">
+                                                                    <span className="text-[8px] font-black text-slate-500 uppercase">Wkts (13.5)</span>
+                                                                    <div className="flex gap-1">
+                                                                        <button onClick={() => onPick(s.id, 'wk', 'under')} className={`uo-btn flex-1 ${matchPredictions[s.id]?.wk === 'under' ? 'active' : ''}`}>U</button>
+                                                                        <button onClick={() => onPick(s.id, 'wk', 'over')} className={`uo-btn flex-1 ${matchPredictions[s.id]?.wk === 'over' ? 'active' : ''}`}>O</button>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
                                             ))}
                                         </div>
                                         {semiWinners[0] && semiWinners[1] && (
-                                            <div className="animate-fadeIn space-y-12">
+                                            <div className="animate-fadeIn space-y-12 mt-12">
                                                 <h3 className="text-3xl font-black text-white italic uppercase tracking-tighter">Gran Finale 2026</h3>
                                                 <div className="flex justify-center gap-12">
-                                                    {semiWinners.map(t => (
-                                                        <button key={t.id} onClick={()=>setChampion(t)} className={`flex flex-col items-center gap-4 transition-all ${champion?.id === t.id ? 'scale-110' : 'grayscale opacity-30 hover:opacity-60'}`}>
+                                                    {semiWinners.map(t => t && (
+                                                        <button key={t.id} onClick={() => { setChampion(t); onPick('final_match', 'w', t.id); }} className={`flex flex-col items-center gap-4 transition-all ${matchPredictions['final_match']?.w === t.id ? 'scale-110' : 'grayscale opacity-30 hover:opacity-60'}`}>
                                                             <div className="text-6xl">🏆</div>
                                                             <div className="flex flex-col"><span className="team-label text-white">{t.name}</span><span className="text-[8px] font-black text-orange-500 uppercase italic">Rank #{t.rank}</span></div>
                                                         </button>
                                                     ))}
                                                 </div>
-                                                {champion && (
-                                                    <div className="max-w-xs mx-auto space-y-4">
-                                                        <div className="grid grid-cols-2 gap-4">
+                                                {matchPredictions['final_match']?.w && (
+                                                    <div className="max-w-md mx-auto space-y-8 glass-card p-8 rounded-[3rem] border border-white/5">
+                                                        <div className="flex gap-4">
+                                                            <div className="flex-1 space-y-1">
+                                                                <span className="text-[8px] font-black text-slate-500 uppercase">Runs Final (350.5)</span>
+                                                                <div className="flex gap-1">
+                                                                    <button onClick={() => onPick('final_match', 'r', 'under')} className={`uo-btn flex-1 ${matchPredictions['final_match']?.r === 'under' ? 'active' : ''}`}>Under</button>
+                                                                    <button onClick={() => onPick('final_match', 'r', 'over')} className={`uo-btn flex-1 ${matchPredictions['final_match']?.r === 'over' ? 'active' : ''}`}>Over</button>
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex-1 space-y-1">
+                                                                <span className="text-[8px] font-black text-slate-500 uppercase">Wkts Final (13.5)</span>
+                                                                <div className="flex gap-1">
+                                                                    <button onClick={() => onPick('final_match', 'wk', 'under')} className={`uo-btn flex-1 ${matchPredictions['final_match']?.wk === 'under' ? 'active' : ''}`}>Under</button>
+                                                                    <button onClick={() => onPick('final_match', 'wk', 'over')} className={`uo-btn flex-1 ${matchPredictions['final_match']?.wk === 'over' ? 'active' : ''}`}>Over</button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="grid grid-cols-2 gap-4 border-t border-white/5 pt-6">
                                                             <div><label className="text-[9px] font-black text-slate-500 uppercase italic">Runs Scarto</label><input type="number" className="w-full p-4 bg-white/5 border border-white/10 rounded-xl text-center font-black" value={tieRuns} onChange={e=>setTieRuns(e.target.value)}/></div>
                                                             <div><label className="text-[9px] font-black text-slate-500 uppercase italic">Wkts Risp.</label><input type="number" className="w-full p-4 bg-white/5 border border-white/10 rounded-xl text-center font-black" value={tieWkts} onChange={e=>setTieWkts(e.target.value)}/></div>
                                                         </div>
@@ -898,19 +909,7 @@
                                         )}
                                     </div>
                                 )}
-                                {phase === PHASES.SUMMARY && <Summary 
-                                    playerName={playerName} 
-                                    champion={champion} 
-                                    tieRuns={tieRuns} 
-                                    tieWkts={tieWkts} 
-                                    copyCode={copyCode} 
-                                    resetGame={resetGame} 
-                                    groupStandings={groupStandings} 
-                                    super8Standings={super8Standings} 
-                                    matchPredictions={matchPredictions}
-                                    super8Fixtures={super8Fixtures}
-                                    semiWinners={semiWinners}
-                                />}
+                                {phase === PHASES.SUMMARY && <Summary playerName={playerName} champion={champion} tieRuns={tieRuns} tieWkts={tieWkts} copyCode={copyCode} resetGame={resetGame} groupStandings={groupStandings} super8Standings={super8Standings} matchPredictions={matchPredictions} super8Fixtures={super8Fixtures} semiWinners={semiWinners} />}
                                 {phase === PHASES.ADMIN && <AdminPanel leaderboardData={leaderboard} setLeaderboardData={setLeaderboard} realResults={realResults} setRealResults={setRealResults} notify={notify} />}
                             </div>
                         )}
