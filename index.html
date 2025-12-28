@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>2026 T20 World Cup Predictor - Admin Console</title>
+    <title>2026 T20 World Cup Predictor</title>
     
     <!-- Frameworks -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -53,14 +53,19 @@
         }
         
         .hero-logo-container {
-            width: 85%;
-            max-width: 240px; /* Ridotto di un ulteriore cm per estetica */
+            width: 100%;
+            max-width: 320px; 
+            padding: 10px;
             filter: drop-shadow(0 0 30px rgba(249, 115, 22, 0.4));
             transition: transform 0.3s ease;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: visible;
         }
         
         @media (min-width: 640px) {
-            .hero-logo-container { max-width: 340px; }
+            .hero-logo-container { max-width: 400px; }
         }
 
         input, select { font-size: 16px !important; border-radius: 12px; }
@@ -101,7 +106,7 @@
         const { useState, useEffect, useMemo, Fragment } = React;
         const { jsPDF } = window.jspdf;
 
-        // --- 1. DATI FISSI & CONFIGURAZIONE ---
+        // --- 1. CONFIGURAZIONE E DATI FISSI ---
         const CUSTOM_LOGO_URL = "https://upload.wikimedia.org/wikipedia/en/f/fa/2026_ICC_Men%27s_T20_World_Cup_logo.svg"; 
 
         const INITIAL_GROUPS = {
@@ -115,7 +120,21 @@
         const TEAMS_MAP = {}; Object.values(INITIAL_GROUPS).forEach(g => g.forEach(t => TEAMS_MAP[t.id] = t));
         const ALL_GROUP_FIXTURES = {}; Object.keys(INITIAL_GROUPS).forEach(g => { const teams = INITIAL_GROUPS[g]; const f = []; for (let i = 0; i < teams.length; i++) for (let j = i + 1; j < teams.length; j++) f.push({ id: `${g}-${teams[i].id}-${teams[j].id}`, group: g, team1: teams[i], team2: teams[j] }); ALL_GROUP_FIXTURES[g] = f; });
 
-        // --- 2. LOGICA DI SUPPORTO ---
+        // --- 2. COMPONENTI ATOMICI ---
+
+        function Flag({ id, size = "h-4" }) {
+            const team = TEAMS_MAP[id]; if(!team) return null;
+            const wi_flag = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2MCA0MCI+PHJlY3Qgd2lkdGg9IjYwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjN2EwMDM1Ii8+PGNpcmNsZSBjeD0iMzAiIGN5PSIzNSIgcj0iMTUiIGZpbGw9IiNmZmQxMDAiIG9wYWNpdHk9IjAuOCIvPjxwYXRoIGQ9Ik0zMCAxNSBMMzAgMzUgTTI1IDM1IEwzNSAzNSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIi8+PHBhdGggZD0iTTMwIDE1IEwzNSAxMCBNMzAgMTUgTDI1IDEwIiBzdHJva2U9IiNmZmQxMDAiIHN0cm9rZS13aWR0aD0iMiIvPjwvc3ZnPg==";
+            const url = id === 'wi' ? wi_flag : `https://flagcdn.com/w40/${team.code}.png`;
+            return <img src={url} className={`${size} inline-block mr-1 shadow-sm rounded-sm object-contain`} crossOrigin="anonymous" />;
+        }
+
+        function T20Logo({ className }) {
+            return <img src={CUSTOM_LOGO_URL} className={`${className} object-contain rounded-2xl w-full h-auto`} alt="ICC World Cup 2026" />;
+        }
+
+        // --- 3. FUNZIONI DI SUPPORTO ---
+
         function b64Encode(str) { return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (m, p) => String.fromCharCode('0x' + p))); }
         function b64Decode(str) { return decodeURIComponent(atob(str).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')); }
         
@@ -166,43 +185,39 @@
             });
             const rs = getTeamsAtStage(real.matches);
             const us = getTeamsAtStage(player.matchPredictions);
-            us.s8.forEach(tid => { if(rs.s8.includes(tid)) score += 50; });
-            us.semis.forEach(tid => { if(rs.semis.includes(tid)) score += 80; });
-            us.finalists.forEach(tid => { if(rs.finalists.includes(tid)) score += 120; });
+            
+            const completedGroups = Object.keys(ALL_GROUP_FIXTURES).every(g => ALL_GROUP_FIXTURES[g].every(m => !!real.matches?.[m.id]));
+            const completedS8 = Object.keys(real.matches || {}).some(k => k.startsWith('S8'));
+            const completedSemis = !!real.matches?.['semi1'] && !!real.matches?.['semi2'];
+            const completedFinal = !!real.matches?.['final_match'];
+
+            if (completedGroups) us.s8.forEach(tid => { if(rs.s8.includes(tid)) score += 50; });
+            if (completedS8) us.semis.forEach(tid => { if(rs.semis.includes(tid)) score += 80; });
+            if (completedSemis) us.finalists.forEach(tid => { if(rs.finalists.includes(tid)) score += 120; });
+            
             const realRunnerUp = rs.finalists.find(id => id !== real.champion);
             const userRunnerUp = us.finalists.find(id => id !== player.championId);
-            if(realRunnerUp && userRunnerUp && realRunnerUp === userRunnerUp) score += 180;
-            if (real.champion && player.championId === real.champion) score += 250; 
+            if(completedFinal && realRunnerUp && userRunnerUp && realRunnerUp === userRunnerUp) score += 180;
+            if (completedFinal && real.champion && player.championId === real.champion) score += 250; 
+            
             return score;
         }
 
-        // --- 3. COMPONENTI UI ---
-
-        function Flag({ id, size = "h-4" }) {
-            const team = TEAMS_MAP[id]; if(!team) return null;
-            const wi_flag = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2MCA0MCI+PHJlY3Qgd2lkdGg9IjYwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjN2EwMDM1Ii8+PGNpcmNsZSBjeD0iMzAiIGN5PSIzNSIgcj0iMTUiIGZpbGw9IiNmZmQxMDAiIG9wYWNpdHk9IjAuOCIvPjxwYXRoIGQ9Ik0zMCAxNSBMMzAgMzUgTTI1IDM1IEwzNSAzNSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIi8+PHBhdGggZD0iTTMwIDE1IEwzNSAxMCBNMzAgMTUgTDI1IDEwIiBzdHJva2U9IiNmZmQxMDAiIHN0cm9rZS13aWR0aD0iMiIvPjwvc3ZnPg==";
-            const url = id === 'wi' ? wi_flag : `https://flagcdn.com/w40/${team.code}.png`;
-            return <img src={url} className={`${size} inline-block mr-1 shadow-sm rounded-sm object-contain`} crossOrigin="anonymous" />;
-        }
-
-        function T20Logo({ className }) {
-            if (CUSTOM_LOGO_URL) return <img src={CUSTOM_LOGO_URL} className={`${className} object-contain rounded-2xl`} alt="World Cup 2026" />;
-            return null;
-        }
+        // --- 4. VISTE DELL'APPLICAZIONE ---
 
         function Header({ setPhase, phase, downloadRegolamentoPDF }) {
             return (
                 <header className="h-20 glass-card fixed top-0 w-full z-50 px-6 flex items-center justify-between border-b border-white/10">
                     <div className="flex items-center gap-3 cursor-pointer group" onClick={() => setPhase(PHASES.INTRO)}>
-                        <div className="bg-orange-500 p-2 rounded-xl text-white text-xl flex items-center justify-center">🏆</div>
+                        <div className="bg-orange-500 p-2 rounded-xl text-white text-xl flex items-center justify-center shadow-lg">🏆</div>
                         <div className="leading-tight">
                             <h1 className="title-font text-lg tracking-tighter text-white">WC 2026</h1>
-                            <p className="text-[8px] font-black text-orange-400 uppercase tracking-widest italic">Official Contest</p>
+                            <p className="text-[8px] font-black text-orange-400 uppercase tracking-widest italic leading-none mt-1">Official Contest</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
                         <button onClick={downloadRegolamentoPDF} className="px-4 py-2 bg-white/5 border border-white/10 rounded-full text-orange-400 font-black uppercase text-[9px] tracking-widest hover:bg-white/10 transition-all hidden sm:block">Regolamento 📜</button>
-                        <button onClick={() => setPhase(PHASES.ADMIN)} className={`px-5 py-2 rounded-full font-black text-[10px] uppercase tracking-widest transition-all ${phase === PHASES.ADMIN ? 'bg-orange-500 text-white' : 'bg-white/5 text-orange-400 border border-orange-500/20 hover:bg-white/10'}`}>Area Riservata</button>
+                        <button onClick={() => setPhase(PHASES.ADMIN)} className={`px-5 py-2 rounded-full font-black text-[10px] uppercase tracking-widest transition-all ${phase === PHASES.ADMIN ? 'bg-orange-500 text-white shadow-md' : 'bg-white/5 text-orange-400 border border-orange-500/20 hover:bg-white/10'}`}>Area Riservata</button>
                     </div>
                 </header>
             );
@@ -212,11 +227,18 @@
             return (
                 <div className="flex flex-col items-center justify-center min-h-screen w-full px-6 text-center animate-fadeIn">
                     <div className="w-full max-w-lg flex flex-col items-center gap-10">
-                        <div className="hero-logo-container"><T20Logo className="w-full h-auto" /></div>
-                        <div className="glass-card p-10 rounded-[3rem] shadow-2xl space-y-8 w-full border border-white/5">
-                            <div className="space-y-4 text-center">
-                                <label className="block text-[10px] font-black text-orange-400 uppercase tracking-[0.2em]">Nickname Partecipante</label>
-                                <input type="text" className="w-full py-5 px-6 bg-white/5 border border-white/10 rounded-2xl text-white font-black text-center focus:border-orange-500 transition-colors outline-none uppercase" value={playerName} onChange={(e) => setPlayerName(e.target.value)} placeholder="" />
+                        <div className="hero-logo-container">
+                            <T20Logo className="w-full" />
+                        </div>
+                        <div className="glass-card p-10 rounded-[3rem] shadow-2xl space-y-8 w-full border border-white/5 relative overflow-hidden">
+                            {/* Deadline Badge */}
+                            <div className="bg-red-600/90 text-white text-[10px] font-black uppercase tracking-widest py-3 px-6 rounded-b-2xl absolute top-0 left-1/2 transform -translate-x-1/2 shadow-lg z-10 w-full">
+                                Deadline: Sabato 7 Febbraio ore 06:30
+                            </div>
+
+                            <div className="space-y-4 pt-10 text-center">
+                                <label className="block text-[10px] font-black text-orange-400 uppercase tracking-[0.2em]">Scegli il tuo Nickname</label>
+                                <input type="text" className="w-full py-5 px-6 bg-white/5 border border-white/10 rounded-2xl text-white font-black text-center focus:border-orange-500 transition-colors outline-none uppercase" value={playerName} onChange={(e) => setPlayerName(e.target.value)} />
                             </div>
                             <button disabled={!playerName} onClick={onStart} className="w-full py-5 orange-button text-white font-black rounded-2xl text-lg uppercase tracking-widest active:scale-95 disabled:opacity-20 transition-all">GIOCA ORA</button>
                         </div>
@@ -247,11 +269,11 @@
                                         return (
                                             <div key={m.id} className="match-card rounded-[2.5rem] p-4 flex flex-col gap-4 shadow-lg">
                                                 <div className="flex items-center justify-between gap-2">
-                                                    <div onClick={()=>onPick(m.id, 'w', m.team1.id)} className={`flex-1 flex items-center gap-3 p-3 rounded-[1.5rem] cursor-pointer transition-all ${p.w === m.team1.id ? 'selected-winner' : 'hover:bg-white/5'}`}>
+                                                    <div onClick={()=>onPick(m.id, 'w', m.team1.id)} className={`flex-1 flex items-center gap-3 p-3 rounded-[1.5rem] cursor-pointer transition-all ${p.w === m.team1.id ? 'selected-winner shadow-lg' : 'hover:bg-white/5'}`}>
                                                         <Flag id={m.team1.id} size="h-6"/><div className="flex flex-col text-left"><span className="team-label">{m.team1.name}</span><span className={`text-[8px] font-black uppercase ${p.w === m.team1.id ? 'text-white' : 'text-orange-500'}`}>Rank #{m.team1.rank}</span></div>
                                                     </div>
-                                                    <div className="px-2 font-black text-slate-700 text-[9px] italic">VS</div>
-                                                    <div onClick={()=>onPick(m.id, 'w', m.team2.id)} className={`flex-1 flex items-center justify-end gap-3 p-3 rounded-[1.5rem] text-right cursor-pointer transition-all ${p.w === m.team2.id ? 'selected-winner' : 'hover:bg-white/5'}`}>
+                                                    <div className="px-2 font-black text-slate-700 text-[9px] italic uppercase tracking-tighter">vs</div>
+                                                    <div onClick={()=>onPick(m.id, 'w', m.team2.id)} className={`flex-1 flex items-center justify-end gap-3 p-3 rounded-[1.5rem] text-right cursor-pointer transition-all ${p.w === m.team2.id ? 'selected-winner shadow-lg' : 'hover:bg-white/5'}`}>
                                                         <div className="flex flex-col text-right"><span className="team-label">{m.team2.name}</span><span className={`text-[8px] font-black uppercase ${p.w === m.team2.id ? 'text-white' : 'text-orange-500'}`}>Rank #{m.team2.rank}</span></div><Flag id={m.team2.id} size="h-6"/>
                                                     </div>
                                                 </div>
@@ -306,23 +328,59 @@
         }
 
         function Summary({ playerName, champion, tieRuns, tieWkts, copyCode, resetGame, matchPredictions, isAuto }) {
+            const downloadPDFChoices = () => {
+                const doc = new jsPDF();
+                const titleColor = [15, 23, 42];
+                doc.setFillColor(titleColor[0], titleColor[1], titleColor[2]); doc.rect(0, 0, 210, 45, 'F');
+                doc.setTextColor(255, 255, 255); doc.setFontSize(22); doc.text("SCHEDA PRONOSTICI UFFICIALE", 105, 20, { align: 'center' });
+                doc.setFontSize(10); doc.text("T20 WORLD CUP 2026 - India & Sri Lanka", 105, 30, { align: 'center' });
+                
+                doc.setTextColor(0,0,0); doc.setFontSize(14); doc.text("DETTAGLI PARTECIPANTE", 14, 60);
+                doc.setFontSize(11); doc.text(`Nickname: ${playerName.toUpperCase()}`, 14, 67);
+                doc.text(`Data Generazione: ${new Date().toLocaleDateString('it-IT')}`, 14, 73);
+                if(isAuto) doc.setTextColor(249, 115, 22).text("(Simulazione Automatica Effettuata)", 14, 79).setTextColor(0,0,0);
+
+                doc.setFontSize(14); doc.text("PREVISIONE VINCITORE ASSOLUTO", 14, 95);
+                doc.setFontSize(20); doc.setTextColor(249, 115, 22); doc.text(champion?.name.toUpperCase() || "NON DEFINITO", 14, 105);
+                
+                doc.setTextColor(0,0,0); doc.setFontSize(11); 
+                doc.text(`Runs di scarto (Tie-breaker Finale): ${tieRuns || 0}`, 14, 115);
+                doc.text(`Wickets risparmiati (Tie-breaker Finale): ${tieWkts || 0}`, 14, 121);
+
+                const rows = Object.keys(matchPredictions).map(mid => {
+                    const p = matchPredictions[mid];
+                    const teamName = TEAMS_MAP[p.w]?.name.toUpperCase() || "---";
+                    return [mid, teamName, p.r.toUpperCase(), p.wk.toUpperCase()];
+                });
+
+                doc.autoTable({
+                    startY: 130,
+                    head: [['Match ID', 'Vincitore Scelto', 'Runs U/O', 'Wkts U/O']],
+                    body: rows,
+                    theme: 'striped',
+                    styles: { fontSize: 8 },
+                    headStyles: { fillColor: [15, 23, 42] }
+                });
+
+                doc.save(`Pronostico_T20_${playerName}.pdf`);
+            };
+
             return (
                 <div className="py-32 px-4 text-center space-y-8 animate-fadeIn pb-48">
                     <div className="bg-slate-900 rounded-[4rem] shadow-2xl border border-white/5 overflow-hidden max-w-md mx-auto">
-                        <div className="bg-orange-500 p-16 text-white relative text-center">
+                        <div className="bg-orange-500 p-16 text-white relative text-center shadow-inner">
                             <div className="text-8xl mb-6 drop-shadow-2xl">🏆</div>
-                            <h2 className="text-4xl font-black title-font italic tracking-tighter uppercase">Riepilogo Pronostico</h2>
+                            <h2 className="text-4xl font-black title-font italic tracking-tighter uppercase leading-tight">Pronostico<br/>Inviato</h2>
                             <p className="text-white/70 text-[10px] font-black uppercase tracking-[0.3em] mt-4 italic">{playerName} {isAuto && "(AUTO ✨)"}</p>
                         </div>
                         <div className="p-12 space-y-12 text-center">
-                            <span className="text-[10px] font-black text-orange-500 bg-orange-500/10 px-6 py-2 rounded-full uppercase tracking-widest italic border border-orange-500/20">Campione Mondiale</span>
-                            <div className="text-5xl font-black text-white title-font italic tracking-tighter leading-none">{champion?.name}</div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="bg-white/5 p-6 rounded-[2rem] border border-white/10"><div className="text-[9px] font-black text-slate-500 uppercase mb-2">Runs Scarto</div><div className="text-4xl font-black text-orange-500 italic">{tieRuns}</div></div>
-                                <div className="bg-white/5 p-6 rounded-[2rem] border border-white/10"><div className="text-[9px] font-black text-slate-500 uppercase mb-2">Wkts Risp.</div><div className="text-4xl font-black text-orange-500 italic">{tieWkts}</div></div>
-                            </div>
                             <div className="space-y-4">
                                 <button onClick={copyCode} className="w-full py-6 orange-button text-white font-black rounded-[2rem] uppercase tracking-widest shadow-2xl active:scale-95 text-xs">COPIA CODICE PER ADMIN</button>
+                                <button onClick={downloadPDFChoices} className="w-full py-4 bg-white/5 border border-white/20 text-white font-black rounded-[2rem] uppercase tracking-widest hover:bg-white/10 transition-all text-[10px]">SCARICA SCHEDA PDF 📄</button>
+                            </div>
+                            <div className="pt-4 border-t border-white/5 text-center flex flex-col items-center">
+                                <span className="text-[10px] font-black text-orange-500 bg-orange-500/10 px-6 py-2 rounded-full uppercase tracking-widest italic mb-4">Vincitore Pronosticato</span>
+                                <div className="text-4xl font-black text-white title-font italic tracking-tighter uppercase leading-none">{champion?.name}</div>
                             </div>
                         </div>
                     </div>
@@ -348,20 +406,14 @@
                 return s;
             }, [realResults]);
 
-            const realS8Fixtures = useMemo(() => {
-                const G1 = [realGroupStandings.A[0], realGroupStandings.B[1], realGroupStandings.C[0], realGroupStandings.D[1]].filter(Boolean);
-                const G2 = [realGroupStandings.A[1], realGroupStandings.B[0], realGroupStandings.C[1], realGroupStandings.D[0]].filter(Boolean);
-                return { S8G1: generateFixtures(G1, 'S8G1'), S8G2: generateFixtures(G2, 'S8G2') };
-            }, [realGroupStandings]);
-
             const handleLogin = (e) => {
                 if (e) e.preventDefault();
-                if (pwd.trim().toLowerCase() === 'admin') setAuth(true); else notify('Accesso negato ❌');
+                if (pwd.trim().toLowerCase() === 'admin') setAuth(true); else notify('Credenziali Errate ❌');
             };
 
             const updateResult = (id, field, val) => {
-                const mRes = realResults.matches?.[id] || {};
-                let updM = { ...mRes, [field]: val };
+                const mR = realResults.matches?.[id] || {};
+                let updM = { ...mR, [field]: val };
                 if (field === 'abandoned' && val === true) updM = { abandoned: true };
                 else if (field !== 'abandoned') updM.abandoned = false;
                 const updAll = { ...realResults, matches: { ...realResults.matches, [id]: updM } };
@@ -392,8 +444,8 @@
                 <div className="py-32 px-4 flex justify-center items-center min-h-[60vh]">
                     <div className="glass-card p-12 rounded-[3.5rem] shadow-2xl border border-white/5 max-w-xs w-full text-center animate-fadeIn">
                         <form onSubmit={handleLogin}>
-                            <label className="block text-[10px] font-black text-orange-500 uppercase mb-8 tracking-[0.3em]">Access Code</label>
-                            <input type="password" placeholder="admin" className="w-full p-5 bg-white/5 border border-white/10 rounded-2xl mb-8 text-center font-black tracking-[0.6em] text-white outline-none focus:border-orange-500" value={pwd} onChange={(e)=>setPwd(e.target.value)} autoFocus />
+                            <label className="block text-[10px] font-black text-orange-500 uppercase mb-8 tracking-[0.3em]">Accesso Riservato</label>
+                            <input type="password" placeholder="Inserisci Password" className="w-full p-5 bg-white/5 border border-white/10 rounded-2xl mb-8 text-center font-black tracking-[0.6em] text-white outline-none focus:border-orange-500 transition-all" value={pwd} onChange={(e)=>setPwd(e.target.value)} autoFocus />
                             <button type="submit" className="w-full py-5 orange-button text-white font-black rounded-3xl shadow-xl uppercase tracking-widest text-[11px]">SBLOCCA</button>
                         </form>
                     </div>
@@ -406,13 +458,13 @@
                         <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl z-[100] p-6 flex items-center justify-center animate-fadeIn overflow-hidden">
                             <div className="glass-card w-full max-w-2xl h-full max-h-[85vh] overflow-hidden rounded-[3rem] p-8 flex flex-col space-y-6 border border-white/10">
                                 <div className="flex justify-between items-center">
-                                    <div><h3 className="text-3xl font-black text-white italic uppercase">{detailPlayer.name}</h3><p className="text-orange-500 font-black uppercase text-[10px] tracking-widest italic">Analisi Punteggio: {detailPlayer.currentScore} PT {detailPlayer.af && '(AUTO)'}</p></div>
-                                    <button onClick={() => setDetailPlayer(null)} className="text-slate-500 text-4xl font-black p-2">&times;</button>
+                                    <div><h3 className="text-3xl font-black text-white italic uppercase">{detailPlayer.name}</h3><p className="text-orange-500 font-black uppercase text-[10px] tracking-widest italic">Breakdown Punti: {detailPlayer.currentScore} PT</p></div>
+                                    <button onClick={() => setDetailPlayer(null)} className="text-slate-500 text-4xl font-black p-2 hover:text-white transition-colors">&times;</button>
                                 </div>
                                 <div className="bg-white/5 p-4 rounded-2xl border border-white/5 grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="space-y-1 text-center sm:text-left">
+                                    <div className="space-y-1">
                                         <span className="block text-[8px] text-slate-500 uppercase font-black">Bonus Qualificazioni</span>
-                                        <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
+                                        <div className="flex flex-wrap gap-2">
                                             {(() => {
                                                 const rs = getTeamsAtStage(realResults.matches || {});
                                                 const us = getTeamsAtStage(detailPlayer.matchPredictions);
@@ -429,9 +481,9 @@
                                             })()}
                                         </div>
                                     </div>
-                                    <div className="space-y-1 text-center sm:text-right">
-                                        <span className="block text-[8px] text-slate-500 uppercase font-black">Vincitore & Runner-Up</span>
-                                        <div className="flex justify-center sm:justify-end gap-2">
+                                    <div className="space-y-1 text-right">
+                                        <span className="block text-[8px] text-slate-500 uppercase font-black">Esito Finale</span>
+                                        <div className="flex justify-end gap-2">
                                             {(() => {
                                                 const rs = getTeamsAtStage(realResults.matches || {});
                                                 const us = getTeamsAtStage(detailPlayer.matchPredictions);
@@ -440,7 +492,7 @@
                                                 return (
                                                     <Fragment>
                                                         {rRU && uRU && rRU === uRU && <span className="bg-green-500/20 text-green-400 text-[8px] font-black px-2 py-1 rounded">R-UP: +180</span>}
-                                                        {realResults.champion && detailPlayer.championId === realResults.champion && <span className="bg-green-500/20 text-green-400 text-[8px] font-black px-2 py-1 rounded">VINCITORE: +250</span>}
+                                                        {realResults.champion && detailPlayer.championId === realResults.champion && <span className="bg-green-500/20 text-green-400 text-[8px] font-black px-2 py-1 rounded">WINNER: +250</span>}
                                                     </Fragment>
                                                 );
                                             })()}
@@ -450,17 +502,20 @@
                                 <div className="flex-grow overflow-y-auto custom-scrollbar pr-4 space-y-3">
                                     {Object.keys(detailPlayer.matchPredictions || {}).map(mid => {
                                         const p = detailPlayer.matchPredictions[mid]; const r = realResults.matches?.[mid] || {};
-                                        let matchTotal = 0; let winCorrect = false, runsCorrect = false, wktsCorrect = false;
+                                        let matchTotal = 0; let winC = false, runsC = false, wktsC = false;
                                         if(r.abandoned) { matchTotal = 1; } 
-                                        else if(p && r.w) { if(p.w === r.w) { winCorrect = true; matchTotal += TEAMS_MAP[r.w].rank; if(p.r === r.r) { runsCorrect = true; matchTotal += 25; } if(p.wk === r.wk) { wktsCorrect = true; matchTotal += 25; } } }
+                                        else if(p && r.w) { if(p.w === r.w) { winC = true; matchTotal += TEAMS_MAP[r.w].rank; if(p.r === r.r) { runsC = true; matchTotal += 25; } if(p.wk === r.wk) { wktsC = true; matchTotal += 25; } } }
                                         return (
                                             <div key={mid} className={`flex justify-between items-center p-3 bg-white/5 rounded-xl border ${matchTotal > 0 ? 'border-green-500/20' : 'border-white/5'}`}>
                                                 <div className="flex flex-col">
                                                     <span className="text-[8px] text-slate-600 font-black uppercase mb-1">{mid}</span>
-                                                    <div className="flex items-center gap-2"><Flag id={p.w} size="h-4" /><span className={`text-[11px] font-black uppercase ${winCorrect ? 'text-green-400' : 'text-slate-200'}`}>{TEAMS_MAP[p.w]?.name || '---'} {winCorrect && <span className="text-[8px]">(+${TEAMS_MAP[r.w].rank})</span>} {r.abandoned && <span className="text-blue-400 text-[8px]">(Rain +1)</span>}</span></div>
+                                                    <div className="flex items-center gap-2"><Flag id={p.w} size="h-4" /><span className={`text-[11px] font-black uppercase ${winC ? 'text-green-400' : 'text-slate-200'}`}>{TEAMS_MAP[p.w]?.name || '---'} {winC && <span className="text-[8px]">(+${TEAMS_MAP[r.w].rank})</span>} {r.abandoned && <span className="text-blue-400 text-[8px]">(Rain +1)</span>}</span></div>
                                                 </div>
                                                 <div className="flex gap-4 items-center">
-                                                    <div className="flex flex-col text-right"><span className={`text-[9px] font-black uppercase ${runsCorrect ? 'text-green-400' : 'text-slate-600'}`}>R: {p.r} {runsCorrect && '(+25)'}</span><span className={`text-[9px] font-black uppercase ${wktsCorrect ? 'text-green-400' : 'text-slate-600'}`}>W: {p.wk} {wktsCorrect && '(+25)'}</span></div>
+                                                    <div className="flex flex-col text-right">
+                                                        <span className={`text-[9px] font-black uppercase ${runsC ? 'text-green-400' : 'text-slate-600'}`}>Runs: {p.r} {runsC && '(+25)'}</span>
+                                                        <span className={`text-[9px] font-black uppercase ${wktsC ? 'text-green-400' : 'text-slate-600'}`}>Wkts: {p.wk} {wktsC && '(+25)'}</span>
+                                                    </div>
                                                     {matchTotal > 0 && <div className="bg-green-500 text-white text-[9px] font-black px-2 py-1 rounded-lg">+{matchTotal}</div>}
                                                 </div>
                                             </div>
@@ -489,9 +544,15 @@
                                     </div>
                                 ))}
                             </div>
+                            <button onClick={()=>{
+                                let msg = "*🏆 CLASSIFICA WC 2026 🏆*\n\n";
+                                sortedLeaderboard.forEach((p, i) => msg += `${i + 1}. *${p.name.toUpperCase()}* - ${p.currentScore} PT\n`);
+                                const el = document.createElement('textarea'); el.value = msg; document.body.appendChild(el); el.select();
+                                document.execCommand('copy'); notify("Classifica copiata! ✅"); document.body.removeChild(el);
+                            }} className="w-full py-5 bg-green-600 text-white font-black rounded-3xl uppercase shadow-xl text-xs tracking-widest">Condividi Classifica 📱</button>
                         </div>
                     )}
-                    {activeTab === 'import' && <div className="glass-card p-16 rounded-[4rem] text-center space-y-10 border border-white/5 animate-fadeIn"><textarea className="w-full h-48 p-10 bg-white/5 border border-white/10 rounded-[3rem] text-[11px] font-mono text-white outline-none focus:border-orange-500 transition-all text-center" value={code} onChange={e=>setCode(e.target.value)} placeholder="INCOLLA CODICE T20-..."></textarea><button onClick={()=>{
+                    {activeTab === 'import' && <div className="glass-card p-16 rounded-[4rem] text-center space-y-10 border border-white/5 animate-fadeIn"><textarea className="w-full h-48 p-10 bg-white/5 border border-white/10 rounded-[3rem] text-[11px] font-mono text-white outline-none focus:border-orange-500 transition-all text-center shadow-inner" value={code} onChange={e=>setCode(e.target.value)} placeholder="INCOLLA CODICE T20-..."></textarea><button onClick={()=>{
                         try {
                             const rD = JSON.parse(b64Decode(code.trim().replace('T20-','')));
                             const mD = { name: rD.n, championId: rD.cid, champion: TEAMS_MAP[rD.cid], matchPredictions: rD.mp, tieRuns: rD.tr, tieWkts: rD.tw, date: rD.d, af: rD.af };
@@ -500,12 +561,22 @@
                     }} className="w-full py-6 orange-button text-white font-black rounded-[2rem] uppercase tracking-widest shadow-2xl text-sm">IMPORTA DATI</button></div>}
                     {activeTab === 'results' && (
                         <div className="space-y-12 animate-fadeIn">
-                            <div className="flex gap-2 justify-center flex-wrap">{['groups', 'super8', 'finals'].map(s => <button key={s} onClick={()=>setResultStage(s)} className={`px-5 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${resultStage === s ? 'bg-orange-500 text-white' : 'bg-white/5 text-slate-500 border border-white/10'}`}>{s === 'groups' ? 'Gironi' : s === 'super8' ? 'Super 8' : 'Finali'}</button>)}</div>
+                            <div className="flex gap-2 justify-center flex-wrap">{['groups', 'super8', 'finals'].map(s => <button key={s} onClick={()=>setResultStage(s)} className={`px-5 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${resultStage === s ? 'bg-orange-500 text-white shadow-md' : 'bg-white/5 text-slate-500 border border-white/10'}`}>{s === 'groups' ? 'Gironi' : s === 'super8' ? 'Super 8' : 'Finali'}</button>)}</div>
                             <div className="glass-card p-6 rounded-[3rem] shadow-2xl border border-white/5 space-y-8">
                                 {resultStage === 'groups' && Object.keys(ALL_GROUP_FIXTURES).map(g => <div key={g} className="space-y-4"><h4 className="text-orange-500 font-black uppercase text-xs italic border-b border-orange-500/20 pb-2">Girone {g}</h4>{ALL_GROUP_FIXTURES[g].map(m => <AdminMatchRow key={m.id} m={m} id={m.id} phaseGroup={g} />)}</div>)}
-                                {resultStage === 'super8' && Object.keys(realS8Fixtures).map(gk => <div key={gk} className="space-y-4"><h4 className="text-orange-500 font-black uppercase text-xs italic border-b border-orange-500/20 pb-2">SUPER 8 - {gk}</h4>{realS8Fixtures[gk].map(m => <AdminMatchRow key={m.id} m={m} id={m.id} phaseGroup={gk} />)}</div>)}
+                                {resultStage === 'super8' && (
+                                    <Fragment>
+                                        {(() => {
+                                            const gs = {}; Object.keys(INITIAL_GROUPS).forEach(g => { gs[g] = calcRank(INITIAL_GROUPS[g], ALL_GROUP_FIXTURES[g], realResults.matches || {}); });
+                                            const G1 = [gs.A[0], gs.B[1], gs.C[0], gs.D[1]].filter(Boolean);
+                                            const G2 = [gs.A[1], gs.B[0], gs.C[1], gs.D[0]].filter(Boolean);
+                                            const s8f = { S8G1: generateFixtures(G1, 'S8G1'), S8G2: generateFixtures(G2, 'S8G2') };
+                                            return Object.keys(s8f).map(gk => <div key={gk} className="space-y-4"><h4 className="text-orange-500 font-black uppercase text-xs italic border-b border-orange-500/20 pb-2">SUPER 8 - {gk}</h4>{s8f[gk].map(m => <AdminMatchRow key={m.id} m={m} id={m.id} phaseGroup={gk} />)}</div>);
+                                        })()}
+                                    </Fragment>
+                                )}
                                 {resultStage === 'finals' && (
-                                    <div className="space-y-8">
+                                    <div className="space-y-8 text-center">
                                         {[{id:'semi1', name:'Semifinale 1'},{id:'semi2', name:'Semifinale 2'},{id:'final_match', name:'Finalissima'}].map(f => (
                                             <div key={f.id} className="space-y-4">
                                                 <h4 className="text-orange-500 font-black uppercase text-[10px] text-center italic">{f.name}</h4>
@@ -518,15 +589,15 @@
                                             </div>
                                         ))}
                                         <div className="pt-4 border-t border-white/5 text-center">
-                                            <label className="block text-[10px] font-black text-orange-500 uppercase mb-2">Campione Mondiale Reale</label>
-                                            <select className="w-full p-4 bg-white/5 border border-white/10 rounded-2xl font-black text-orange-500 outline-none text-center uppercase italic" value={realResults.champion || ""} onChange={(e)=>setRealResults({...realResults, champion: e.target.value})}><option value="">-- SELEZIONA --</option>{Object.values(TEAMS_MAP).map(t=><option key={t.id} value={t.id}>{t.name.toUpperCase()}</option>)}</select>
+                                            <label className="block text-[10px] font-black text-orange-500 uppercase mb-2">Vincitore Mondiale Reale</label>
+                                            <select className="w-full p-4 bg-white/5 border border-white/10 rounded-2xl font-black text-orange-500 outline-none text-center uppercase italic" value={realResults.champion || ""} onChange={(e)=>setRealResults({...realResults, champion: e.target.value})}><option value="">-- SELEZIONA SQUADRA --</option>{Object.values(TEAMS_MAP).map(t=><option key={t.id} value={t.id}>{t.name.toUpperCase()}</option>)}</select>
                                         </div>
                                     </div>
                                 )}
                             </div>
                         </div>
                     )}
-                    <button onClick={()=>setAuth(false)} className="w-full py-6 text-slate-700 font-black text-[11px] uppercase tracking-[0.4em] border border-white/5 rounded-[2rem] hover:text-white transition-colors">LOGOUT ADMIN</button>
+                    <button onClick={()=>setAuth(false)} className="w-full py-6 text-slate-700 font-black text-[11px] uppercase tracking-[0.4em] border border-white/5 rounded-[2rem] hover:text-white transition-colors">LOGOUT</button>
                 </div>
             );
         }
@@ -560,49 +631,62 @@
                 const doc = new jsPDF();
                 const titleColor = [15, 23, 42];
                 doc.setFillColor(titleColor[0], titleColor[1], titleColor[2]); doc.rect(0, 0, 210, 45, 'F');
-                doc.setTextColor(255, 255, 255); doc.setFontSize(22); doc.text("DISCIPLINARE TECNICO - T20 WORLD CUP 2026", 105, 25, { align: 'center' });
-                doc.setTextColor(0,0,0); doc.setFontSize(14); doc.text("1. QUADRO NORMATIVO E ATTRIBUZIONE PUNTEGGI", 14, 60);
-                doc.setFontSize(10);
-                const introT = "Il presente disciplinare regola le modalità di partecipazione e il calcolo delle metriche di punteggio per il contest '2026 T20 World Cup Predictor'. Nota bene: il punteggio di ogni partecipante rimane a 0 fino all'inserimento del primo dato reale da parte dell'amministratore.";
-                doc.text(doc.splitTextToSize(introT, 180), 14, 67);
+                doc.setTextColor(255, 255, 255); 
+                doc.setFont("helvetica", "bold"); doc.setFontSize(22); doc.text("DISCIPLINARE TECNICO E REGOLAMENTO", 105, 25, { align: 'center' });
+                
+                doc.setTextColor(0,0,0); doc.setFontSize(14); doc.text("1. REQUISITI DI PARTECIPAZIONE", 14, 60);
+                doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+                const t1 = "Il partecipante deve per ogni partita di ogni fase del contest oltre a pronosticare il vincente della partita deve anche predire under/over per quanto riguarda runs e wickets totali. Solo Per la finale oltre che predire vincente e undder/over runs e wickets deve anche precisare lo scarto sempre di runs e wickets in caso si necessiti tie-breaker.";
+                doc.text(doc.splitTextToSize(t1, 180), 14, 67);
+
+                doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.text("2. SISTEMA DI ATTRIBUZIONE PUNTEGGI", 14, 90);
+                doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+                doc.text("- Vincitore Corretto: Punteggio pari al Ranking ICC della squadra pronosticata vincente.", 14, 97);
+                doc.text("- Under/Over Corretto: 25 punti per il totale runs e 25 punti per il totale wickets.", 14, 103);
+                doc.text("(I bonus statistici sono validi solo se identificato correttamente il vincitore del match).", 14, 109);
+
+                doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.text("3. BONUS QUALIFICAZIONE FASI AVANZATE", 14, 125);
                 const stageD = [
-                    ["Qualificazione Super 8", "50 PT per singola squadra identificata"],
-                    ["Qualificazione Semifinali", "80 PT per singola squadra identificata"],
-                    ["Qualificazione Finale", "120 PT per singola squadra identificata"],
-                    ["Finalista Runner-up (2°)", "180 PT (Identificazione esatta sconfitta in finale)"],
-                    ["Vincitore Assoluto (Champion)", "250 PT (Identificazione esatta vincitore torneo)"]
+                    ["Qualificazione Super 8", "50 PT per ogni squadra correttamente identificata"],
+                    ["Qualificazione Semifinale", "80 PT per ogni squadra correttamente identificata"],
+                    ["Qualificazione Finale", "120 PT per ogni squadra correttamente identificata"],
+                    ["Squadra Finalista (2°)", "180 PT se correttamente pronosticata"],
+                    ["Campione Mondiale", "250 PT se correttamente pronosticato"]
                 ];
-                doc.autoTable({ startY: 85, head: [['Target Qualificazione', 'Punteggio Fisso']], body: stageD, theme: 'grid', styles: { fontSize: 9 } });
-                doc.save("Regolamento_Ufficiale_Admin_T20.pdf");
+                doc.autoTable({ startY: 130, head: [['Obiettivo Tecnico', 'Punteggio Corrisposto']], body: stageD, theme: 'grid', styles: { fontSize: 9 } });
+
+                doc.setFont("helvetica", "italic"); doc.setFontSize(9);
+                doc.text("Per tutto quanto non espressamente previsto nel suddetto regolamento si applicano le leggi imposte dall'Admin.", 14, doc.lastAutoTable.finalY + 15);
+                doc.save("Regolamento_Ufficiale_Predictor_2026.pdf");
             };
 
             const handleAutoFill = () => {
                 if(!playerName) return; setIsAuto(true);
-                const randomUO = () => Math.random() > 0.5 ? 'over' : 'under';
-                const randomW = (m) => Math.random() > 0.5 ? m.team1.id : m.team2.id;
-                const newPreds = {};
-                Object.values(ALL_GROUP_FIXTURES).flat().forEach(m => { newPreds[m.id] = { w: randomW(m), r: randomUO(), wk: randomUO() }; });
-                const gs = {}; Object.keys(INITIAL_GROUPS).forEach(g => { gs[g] = calcRank(INITIAL_GROUPS[g], ALL_GROUP_FIXTURES[g], newPreds); });
+                const rUO = () => Math.random() > 0.5 ? 'over' : 'under';
+                const rW = (m) => Math.random() > 0.5 ? m.team1.id : m.team2.id;
+                const newP = {};
+                Object.values(ALL_GROUP_FIXTURES).flat().forEach(m => { newP[m.id] = { w: rW(m), r: rUO(), wk: rUO() }; });
+                const gs = {}; Object.keys(INITIAL_GROUPS).forEach(g => { gs[g] = calcRank(INITIAL_GROUPS[g], ALL_GROUP_FIXTURES[g], newP); });
                 const G1 = [gs.A[0], gs.B[1], gs.C[0], gs.D[1]].filter(Boolean);
                 const G2 = [gs.A[1], gs.B[0], gs.C[1], gs.D[0]].filter(Boolean);
                 const s8f = { S8G1: generateFixtures(G1, 'S8G1'), S8G2: generateFixtures(G2, 'S8G2') };
-                Object.values(s8f).flat().forEach(m => { newPreds[m.id] = { w: randomW(m), r: randomUO(), wk: randomUO() }; });
-                const s8s = { S8G1: calcRank(G1, s8f.S8G1, newPreds), S8G2: calcRank(G2, s8f.S8G2, newPreds) };
+                Object.values(s8f).flat().forEach(m => { newP[m.id] = { w: rW(m), r: rUO(), wk: rUO() }; });
+                const s8s = { S8G1: calcRank(G1, s8f.S8G1, newP), S8G2: calcRank(G2, s8f.S8G2, newP) };
                 const sw = [s8s.S8G1[0], s8s.S8G2[0]];
-                newPreds['semi1'] = { w: sw[0].id, r: randomUO(), wk: randomUO() };
-                newPreds['semi2'] = { w: sw[1].id, r: randomUO(), wk: randomUO() };
-                const champ = Math.random() > 0.5 ? sw[0] : sw[1];
-                newPreds['final_match'] = { w: champ.id, r: randomUO(), wk: randomUO() };
-                setGroupStandings(gs); setSuper8Fixtures(s8f); setSuper8Standings(s8s); setSemiWinners(sw); setChampion(champ); setMatchPredictions(newPreds);
+                newP['semi1'] = { w: sw[0].id, r: rUO(), wk: rUO() };
+                newP['semi2'] = { w: sw[1].id, r: rUO(), wk: rUO() };
+                const c = Math.random() > 0.5 ? sw[0] : sw[1];
+                newP['final_match'] = { w: c.id, r: rUO(), wk: rUO() };
+                setGroupStandings(gs); setSuper8Fixtures(s8f); setSuper8Standings(s8s); setSemiWinners(sw); setChampion(c); setMatchPredictions(newP);
                 setTieRuns(Math.floor(Math.random() * 50) + 1); setTieWkts(Math.floor(Math.random() * 10));
                 setPhase(PHASES.SUMMARY); notify("SIMULAZIONE COMPLETATA! ✨");
             };
 
-            const resetGame = () => { if(confirm('Reset?')) { setMatchPredictions({}); setChampion(null); setPhase(PHASES.INTRO); setIsAuto(false); } };
+            const resetGame = () => { if(confirm('Vuoi resettare il pronostico?')) { setMatchPredictions({}); setChampion(null); setPhase(PHASES.INTRO); setIsAuto(false); } };
 
             return (
                 <div className="min-h-screen flex flex-col relative">
-                    {notification && <div className="toast-notification animate-fadeIn"><div className="glass-card bg-orange-500 text-white px-8 py-5 rounded-[2rem] font-black shadow-2xl border-2 border-white/20 uppercase text-[10px] tracking-widest flex items-center gap-4"><span className="text-xl flex items-center justify-center">✨</span> {notification}</div></div>}
+                    {notification && <div className="toast-notification animate-fadeIn"><div className="glass-card bg-orange-500 text-white px-8 py-5 rounded-[2rem] font-black shadow-2xl border-2 border-white/20 uppercase text-[10px] tracking-widest flex items-center justify-center gap-4"><span className="text-xl flex items-center justify-center">✨</span> {notification}</div></div>}
                     <Header setPhase={setPhase} phase={phase} downloadRegolamentoPDF={downloadRegolamentoPDF} />
                     <main className="flex-grow flex flex-col items-center justify-center">
                         {phase === PHASES.INTRO && <Intro playerName={playerName} setPlayerName={setPlayerName} onStart={()=>setPhase(PHASES.MATCHES)} />}
@@ -623,7 +707,7 @@
                                                     {matchPredictions[s.id]?.w && (
                                                         <div className="flex gap-4 pt-4 border-t border-white/5">
                                                             <div className="flex-1 space-y-1"><span className="text-[8px] font-black text-slate-500 uppercase">Runs (350.5)</span><div className="flex gap-1"><button onClick={() => onPick(s.id, 'r', 'under')} className={`uo-btn flex-1 ${matchPredictions[s.id]?.r === 'under' ? 'active' : ''}`}>U</button><button onClick={() => onPick(s.id, 'r', 'over')} className={`uo-btn flex-1 ${matchPredictions[s.id]?.r === 'over' ? 'active' : ''}`}>O</button></div></div>
-                                                            <div className="flex-1 space-y-1"><span className="text-[8px] font-black text-slate-500 uppercase">Wkts (13.5)</span><div className="flex gap-1"><button onClick={() => onPick(s.id, 'wk', 'under')} className={`uo-btn flex-1 ${matchPredictions[s.id]?.wk === 'under' ? 'active' : ''}`}>U</button><button onClick={() => onPick(s.id, 'wk', 'over')} className={`uo-btn flex-1 ${matchPredictions[s.id]?.wk === 'over' ? 'active' : ''}`}>O</button></div></div>
+                                                            <div className="flex-1 space-y-1"><span className="text-[8px] font-black text-slate-500 uppercase">Wkts (13.5)</span><div className="flex gap-1"><button onClick={() => onPick(s.id, 'wk', 'under')} className={`uo-btn flex-1 ${matchPredictions[s.id]?.wk === 'under' ? 'active' : ''}`}>U</button><button onClick={()=>onPick(s.id, 'wk', 'over')} className={`uo-btn flex-1 ${matchPredictions[s.id]?.wk === 'over' ? 'active' : ''}`}>O</button></div></div>
                                                         </div>
                                                     )}
                                                 </div>
@@ -641,10 +725,10 @@
                                                     ))}
                                                 </div>
                                                 {matchPredictions['final_match']?.w && (
-                                                    <div className="max-w-md mx-auto space-y-8 glass-card p-8 rounded-[3rem] border border-white/5">
-                                                        <div className="flex gap-4"><div className="flex-1 space-y-1"><span className="text-[8px] font-black text-slate-500 uppercase">Runs Final (350.5)</span><div className="flex gap-1"><button onClick={() => onPick('final_match', 'r', 'under')} className={`uo-btn flex-1 ${matchPredictions['final_match']?.r === 'under' ? 'active' : ''}`}>U</button><button onClick={() => onPick('final_match', 'r', 'over')} className={`uo-btn flex-1 ${matchPredictions['final_match']?.r === 'over' ? 'active' : ''}`}>O</button></div></div><div className="flex-1 space-y-1"><span className="text-[8px] font-black text-slate-500 uppercase">Wkts Final (13.5)</span><div className="flex gap-1"><button onClick={() => onPick('final_match', 'wk', 'under')} className={`uo-btn flex-1 ${matchPredictions['final_match']?.wk === 'under' ? 'active' : ''}`}>U</button><button onClick={() => onPick('final_match', 'wk', 'over')} className={`uo-btn flex-1 ${matchPredictions['final_match']?.wk === 'over' ? 'active' : ''}`}>O</button></div></div></div>
+                                                    <div className="max-w-md mx-auto space-y-8 glass-card p-8 rounded-[3rem] border border-white/5 shadow-2xl">
+                                                        <div className="flex gap-4"><div className="flex-1 space-y-1"><span className="text-[8px] font-black text-slate-500 uppercase">Runs Final (350.5)</span><div className="flex gap-1"><button onClick={() => onPick('final_match', 'r', 'under')} className={`uo-btn flex-1 ${matchPredictions['final_match']?.r === 'under' ? 'active' : ''}`}>U</button><button onClick={() => onPick('final_match', 'r', 'over')} className={`uo-btn flex-1 ${matchPredictions['final_match']?.r === 'over' ? 'active' : ''}`}>O</button></div></div><div className="flex-1 space-y-1"><span className="text-[8px] font-black text-slate-500 uppercase">Wkts Final (13.5)</span><div className="flex gap-1"><button onClick={() => onPick('final_match', 'wk', 'under')} className={`uo-btn flex-1 ${matchPredictions['final_match']?.wk === 'under' ? 'active' : ''}`}>U</button><button onClick={()=>onPick('final_match', 'wk', 'over')} className={`uo-btn flex-1 ${matchPredictions['final_match']?.wk === 'over' ? 'active' : ''}`}>O</button></div></div></div>
                                                         <div className="grid grid-cols-2 gap-4 border-t border-white/5 pt-6 text-center"><div><label className="text-[9px] font-black text-slate-500 uppercase italic">Runs Scarto</label><input type="number" className="w-full p-4 bg-white/5 border border-white/10 rounded-xl text-center font-black" value={tieRuns} onChange={e=>setTieRuns(e.target.value)}/></div><div><label className="text-[9px] font-black text-slate-500 uppercase italic">Wkts Risp..</label><input type="number" className="w-full p-4 bg-white/5 border border-white/10 rounded-xl text-center font-black" value={tieWkts} onChange={e=>setTieWkts(e.target.value)}/></div></div>
-                                                        <button onClick={()=>setPhase(PHASES.SUMMARY)} className="w-full py-5 orange-button text-white font-black rounded-2xl uppercase shadow-2xl text-xs tracking-widest">Concludi Pronostico</button>
+                                                        <button onClick={()=>setPhase(PHASES.SUMMARY)} className="w-full py-5 orange-button text-white font-black rounded-2xl uppercase shadow-2xl text-xs tracking-widest active:scale-95 transition-all">Concludi Pronostico</button>
                                                     </div>
                                                 )}
                                             </div>
@@ -656,7 +740,7 @@
                             </div>
                         )}
                     </main>
-                    {phase !== PHASES.INTRO && <footer className="py-20 text-center text-slate-800 text-[11px] font-black uppercase tracking-[0.7em] border-t border-white/5 mt-auto italic">ICC Men's T20 World Cup</footer>}
+                    {phase !== PHASES.INTRO && <footer className="py-20 text-center text-slate-800 text-[11px] font-black uppercase tracking-[0.7em] border-t border-white/5 mt-auto italic leading-none">ICC Men's T20 World Cup 2026</footer>}
                 </div>
             );
         }
