@@ -65,7 +65,7 @@
         }
         
         @media (min-width: 640px) {
-            .hero-logo-container { max-width: 400px; }
+            .hero-logo-container { max-width: 380px; }
         }
 
         input, select { font-size: 16px !important; border-radius: 12px; }
@@ -130,10 +130,19 @@
         }
 
         function T20Logo({ className }) {
-            return <img src={CUSTOM_LOGO_URL} className={`${className} object-contain rounded-2xl w-full h-auto`} alt="ICC World Cup 2026" />;
+            return (
+                <div className={`${className} flex flex-col items-center justify-center`}>
+                    <img src={CUSTOM_LOGO_URL} className="object-contain w-full h-auto max-h-[220px]" alt="ICC World Cup 2026" />
+                    <div className="mt-4 text-center leading-none">
+                        <p className="title-font text-[#f97316] text-sm tracking-[0.3em] font-black">ICC MEN'S T20</p>
+                        <p className="title-font text-white text-3xl font-black mt-1">WORLD CUP</p>
+                        <p className="text-[#38bdf8] text-[10px] font-black tracking-[0.2em] mt-2">INDIA & SRI LANKA 2026</p>
+                    </div>
+                </div>
+            );
         }
 
-        // --- 3. FUNZIONI DI SUPPORTO ---
+        // --- 3. FUNZIONI DI CALCOLO ---
 
         function b64Encode(str) { return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (m, p) => String.fromCharCode('0x' + p))); }
         function b64Decode(str) { return decodeURIComponent(atob(str).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')); }
@@ -169,13 +178,17 @@
 
         function calculateTotalScore(player, real) {
             if (!real || !player.matchPredictions) return 0;
-            const hasMatches = real.matches && Object.keys(real.matches).length > 0;
-            const hasChampion = !!real.champion;
-            if (!hasMatches && !hasChampion) return 0;
+            const realMatches = real.matches || {};
+            if (Object.keys(realMatches).length === 0 && !real.champion) return 0;
 
             let score = 0;
-            Object.keys(real.matches || {}).forEach(mid => {
-                const pP = player.matchPredictions[mid]; const rR = real.matches[mid];
+            const completedGroups = Object.keys(ALL_GROUP_FIXTURES).every(g => ALL_GROUP_FIXTURES[g].every(m => !!realMatches[m.id]));
+            const completedS8 = Object.keys(realMatches).some(k => k.startsWith('S8'));
+            const completedSemis = !!realMatches['semi1'] && !!realMatches['semi2'];
+            const completedFinal = !!realMatches['final_match'];
+
+            Object.keys(realMatches).forEach(mid => {
+                const pP = player.matchPredictions[mid]; const rR = realMatches[mid];
                 if (!rR) return; if (rR.abandoned) { score += 1; return; } if (!pP) return;
                 if (pP.w === rR.w) {
                     const winTeam = TEAMS_MAP[rR.w]; if (winTeam) score += winTeam.rank;
@@ -183,13 +196,9 @@
                     if (rR.wk && pP.wk === rR.wk) score += 25;
                 }
             });
-            const rs = getTeamsAtStage(real.matches);
+
+            const rs = getTeamsAtStage(realMatches);
             const us = getTeamsAtStage(player.matchPredictions);
-            
-            const completedGroups = Object.keys(ALL_GROUP_FIXTURES).every(g => ALL_GROUP_FIXTURES[g].every(m => !!real.matches?.[m.id]));
-            const completedS8 = Object.keys(real.matches || {}).some(k => k.startsWith('S8'));
-            const completedSemis = !!real.matches?.['semi1'] && !!real.matches?.['semi2'];
-            const completedFinal = !!real.matches?.['final_match'];
 
             if (completedGroups) us.s8.forEach(tid => { if(rs.s8.includes(tid)) score += 50; });
             if (completedS8) us.semis.forEach(tid => { if(rs.semis.includes(tid)) score += 80; });
@@ -203,7 +212,7 @@
             return score;
         }
 
-        // --- 4. VISTE DELL'APPLICAZIONE ---
+        // --- 4. VISTE ---
 
         function Header({ setPhase, phase, downloadRegolamentoPDF }) {
             return (
@@ -227,9 +236,7 @@
             return (
                 <div className="flex flex-col items-center justify-center min-h-screen w-full px-6 text-center animate-fadeIn">
                     <div className="w-full max-w-lg flex flex-col items-center gap-10">
-                        <div className="hero-logo-container">
-                            <T20Logo className="w-full" />
-                        </div>
+                        <div className="hero-logo-container"><T20Logo className="w-full" /></div>
                         <div className="glass-card p-10 rounded-[3rem] shadow-2xl space-y-8 w-full border border-white/5 relative overflow-hidden">
                             <div className="bg-red-600/90 text-white text-[10px] font-black uppercase tracking-widest py-3 px-6 rounded-b-2xl absolute top-0 left-1/2 transform -translate-x-1/2 shadow-lg z-10 w-full">
                                 Deadline: Sabato 7 Febbraio ore 06:30
@@ -328,7 +335,8 @@
         function Summary({ playerName, champion, tieRuns, tieWkts, copyCode, resetGame, matchPredictions, isAuto }) {
             const downloadPDFChoices = () => {
                 const doc = new jsPDF();
-                doc.setFillColor(15, 23, 42); doc.rect(0, 0, 210, 45, 'F');
+                const titleColor = [15, 23, 42];
+                doc.setFillColor(titleColor[0], titleColor[1], titleColor[2]); doc.rect(0, 0, 210, 45, 'F');
                 doc.setTextColor(255, 255, 255); doc.setFontSize(22); doc.text("SCHEDA PRONOSTICI UFFICIALE", 105, 20, { align: 'center' });
                 doc.setFontSize(10); doc.text("T20 WORLD CUP 2026 - India & Sri Lanka", 105, 30, { align: 'center' });
                 doc.setTextColor(0,0,0); doc.setFontSize(14); doc.text("DETTAGLI PARTECIPANTE", 14, 60);
@@ -397,16 +405,6 @@
                 setRealResults(updAll); localStorage.setItem('t20_real_results', JSON.stringify(updAll));
             };
 
-            // LOGICA DINAMICA PER LE FASI FINALI NELL'ADMIN
-            const currentRealStandings = useMemo(() => {
-                const gs = {}; Object.keys(INITIAL_GROUPS).forEach(g => { gs[g] = calcRank(INITIAL_GROUPS[g], ALL_GROUP_FIXTURES[g], realResults.matches || {}); });
-                const G1 = [gs.A[0], gs.B[1], gs.C[0], gs.D[1]].filter(Boolean);
-                const G2 = [gs.A[1], gs.B[0], gs.C[1], gs.D[0]].filter(Boolean);
-                const s8f = { S8G1: generateFixtures(G1, 'S8G1'), S8G2: generateFixtures(G2, 'S8G2') };
-                const s8s = { S8G1: calcRank(G1, s8f.S8G1, realResults.matches || {}), S8G2: calcRank(G2, s8f.S8G2, realResults.matches || {}) };
-                return { s8f, s8s };
-            }, [realResults]);
-
             const AdminMatchRow = ({ m, id, phaseGroup }) => {
                 const res = realResults.matches?.[id] || {};
                 const runsT = (['A','B','C','D'].includes(phaseGroup)) ? "340.5" : "350.5";
@@ -428,6 +426,15 @@
                 );
             };
 
+            const currentRealStandings = useMemo(() => {
+                const gs = {}; Object.keys(INITIAL_GROUPS).forEach(g => { gs[g] = calcRank(INITIAL_GROUPS[g], ALL_GROUP_FIXTURES[g], realResults.matches || {}); });
+                const G1 = [gs.A[0], gs.B[1], gs.C[0], gs.D[1]].filter(Boolean);
+                const G2 = [gs.A[1], gs.B[0], gs.C[1], gs.D[0]].filter(Boolean);
+                const s8f = { S8G1: generateFixtures(G1, 'S8G1'), S8G2: generateFixtures(G2, 'S8G2') };
+                const s8s = { S8G1: calcRank(G1, s8f.S8G1, realResults.matches || {}), S8G2: calcRank(G2, s8f.S8G2, realResults.matches || {}) };
+                return { s8f, s8s };
+            }, [realResults]);
+
             if(!auth) return (
                 <div className="py-32 px-4 flex justify-center items-center min-h-[60vh]">
                     <div className="glass-card p-12 rounded-[3.5rem] shadow-2xl border border-white/5 max-w-xs w-full text-center animate-fadeIn">
@@ -446,7 +453,7 @@
                         <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl z-[100] p-6 flex items-center justify-center animate-fadeIn overflow-hidden">
                             <div className="glass-card w-full max-w-2xl h-full max-h-[85vh] overflow-hidden rounded-[3rem] p-8 flex flex-col space-y-6 border border-white/10">
                                 <div className="flex justify-between items-center">
-                                    <div><h3 className="text-3xl font-black text-white italic uppercase">{detailPlayer.name}</h3><p className="text-orange-500 font-black uppercase text-[10px] tracking-widest italic">Breakdown Punti: {detailPlayer.currentScore} PT</p></div>
+                                    <div><h3 className="text-3xl font-black text-white italic uppercase">{detailPlayer.name}</h3><p className="text-orange-500 font-black uppercase text-[10px] tracking-widest italic">Analisi Punteggio: {detailPlayer.currentScore} PT</p></div>
                                     <button onClick={() => setDetailPlayer(null)} className="text-slate-500 text-4xl font-black p-2 hover:text-white transition-colors">&times;</button>
                                 </div>
                                 <div className="bg-white/5 p-4 rounded-2xl border border-white/5 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -554,7 +561,7 @@
                                 {resultStage === 'groups' && Object.keys(ALL_GROUP_FIXTURES).map(g => <div key={g} className="space-y-4"><h4 className="text-orange-500 font-black uppercase text-xs italic border-b border-orange-500/20 pb-2">Girone {g}</h4>{ALL_GROUP_FIXTURES[g].map(m => <AdminMatchRow key={m.id} m={m} id={m.id} phaseGroup={g} />)}</div>)}
                                 {resultStage === 'super8' && Object.keys(currentRealStandings.s8f).map(gk => <div key={gk} className="space-y-4"><h4 className="text-orange-500 font-black uppercase text-xs italic border-b border-orange-500/20 pb-2">SUPER 8 - {gk}</h4>{currentRealStandings.s8f[gk].map(m => <AdminMatchRow key={m.id} m={m} id={m.id} phaseGroup={gk} />)}</div>)}
                                 {resultStage === 'finals' && (
-                                    <div className="space-y-8">
+                                    <div className="space-y-8 text-center">
                                         {/* SEMIFINALI DINAMICHE */}
                                         <div className="space-y-4">
                                             <h4 className="text-white font-black uppercase text-sm border-b border-white/10 pb-2 italic">Semifinali</h4>
@@ -571,14 +578,44 @@
                                                 <h4 className="text-white font-black uppercase text-sm border-b border-white/10 pb-2 italic">Finalissima</h4>
                                                 {(() => {
                                                     const f = { id: 'final_match', team1: TEAMS_MAP[realResults.matches.semi1.w], team2: TEAMS_MAP[realResults.matches.semi2.w] };
-                                                    return <AdminMatchRow m={f} id="final_match" phaseGroup="finals" />;
+                                                    return (
+                                                        <Fragment>
+                                                            <AdminMatchRow m={f} id="final_match" phaseGroup="finals" />
+                                                            <div className="grid grid-cols-2 gap-4 mt-2 px-2">
+                                                                <div>
+                                                                    <label className="block text-[8px] font-black text-slate-600 uppercase mb-1">Runs Scarto Reale</label>
+                                                                    <input type="number" className="w-full p-2 bg-white/5 border border-white/10 rounded-lg text-center font-black text-xs" 
+                                                                           value={realResults.tieRuns || ''} 
+                                                                           onChange={(e)=>{
+                                                                               const updated = {...realResults, tieRuns: e.target.value};
+                                                                               setRealResults(updated);
+                                                                               localStorage.setItem('t20_real_results', JSON.stringify(updated));
+                                                                           }} />
+                                                                </div>
+                                                                <div>
+                                                                    <label className="block text-[8px] font-black text-slate-600 uppercase mb-1">Wkts Risp. Reali</label>
+                                                                    <input type="number" className="w-full p-2 bg-white/5 border border-white/10 rounded-lg text-center font-black text-xs" 
+                                                                           value={realResults.tieWkts || ''} 
+                                                                           onChange={(e)=>{
+                                                                               const updated = {...realResults, tieWkts: e.target.value};
+                                                                               setRealResults(updated);
+                                                                               localStorage.setItem('t20_real_results', JSON.stringify(updated));
+                                                                           }} />
+                                                                </div>
+                                                            </div>
+                                                        </Fragment>
+                                                    );
                                                 })()}
                                             </div>
                                         )}
 
                                         <div className="pt-4 border-t border-white/5 text-center">
                                             <label className="block text-[10px] font-black text-orange-500 uppercase mb-2">Vincitore Mondiale Reale</label>
-                                            <select className="w-full p-4 bg-white/5 border border-white/10 rounded-2xl font-black text-orange-500 outline-none text-center uppercase italic" value={realResults.champion || ""} onChange={(e)=>setRealResults({...realResults, champion: e.target.value})}><option value="">-- SELEZIONA SQUADRA --</option>{Object.values(TEAMS_MAP).map(t=><option key={t.id} value={t.id}>{t.name.toUpperCase()}</option>)}</select>
+                                            <select className="w-full p-4 bg-white/5 border border-white/10 rounded-2xl font-black text-orange-500 outline-none text-center uppercase italic" value={realResults.champion || ""} onChange={(e)=>{
+                                                const updated = {...realResults, champion: e.target.value};
+                                                setRealResults(updated);
+                                                localStorage.setItem('t20_real_results', JSON.stringify(updated));
+                                            }}><option value="">-- SELEZIONA SQUADRA --</option>{Object.values(TEAMS_MAP).map(t=><option key={t.id} value={t.id}>{t.name.toUpperCase()}</option>)}</select>
                                         </div>
                                     </div>
                                 )}
