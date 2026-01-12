@@ -176,38 +176,56 @@
             return { s8: s8Teams, semis: semiTeams, finalists: finalists };
         }
 
-        function calculateTotalScore(player, real) {
-            if (!real || !player.matchPredictions) return 0;
+        function calculateDetailedScore(player, real) {
+            if (!real || !player.matchPredictions) return { total: 0, breakdown: {} };
             const realMatches = real.matches || {};
-            if (Object.keys(realMatches).length === 0 && !real.champion) return 0;
+            
+            let matchPoints = 0;
+            let bonusS8 = 0;
+            let bonusSemis = 0;
+            let bonusFinalists = 0;
+            let bonusRunnerUp = 0;
+            let bonusWinner = 0;
 
-            let score = 0;
-            const completedGroups = Object.keys(ALL_GROUP_FIXTURES).every(g => ALL_GROUP_FIXTURES[g].every(m => !!realMatches[m.id]));
-            const completedS8 = Object.keys(realMatches).some(k => k.startsWith('S8'));
-            const completedSemis = !!realMatches['semi1'] && !!realMatches['semi2'];
-            const completedFinal = !!realMatches['final_match'];
-
+            // Punti dai match
             Object.keys(realMatches).forEach(mid => {
                 const pP = player.matchPredictions[mid]; const rR = realMatches[mid];
-                if (!rR) return; if (rR.abandoned) { score += 1; return; } if (!pP) return;
+                if (!rR) return; if (rR.abandoned) { matchPoints += 1; return; } if (!pP) return;
                 if (pP.w === rR.w) {
-                    const winTeam = TEAMS_MAP[rR.w]; if (winTeam) score += winTeam.rank;
-                    if (rR.r && pP.r === rR.r) score += 25;
-                    if (rR.wk && pP.wk === rR.wk) score += 25;
+                    const winTeam = TEAMS_MAP[rR.w]; if (winTeam) matchPoints += winTeam.rank;
+                    if (rR.r && pP.r === rR.r) matchPoints += 25;
+                    if (rR.wk && pP.wk === rR.wk) matchPoints += 25;
                 }
             });
 
             const rs = getTeamsAtStage(realMatches);
             const us = getTeamsAtStage(player.matchPredictions);
 
-            if (completedGroups) us.s8.forEach(tid => { if(rs.s8.includes(tid)) score += 50; });
-            if (completedS8) us.semis.forEach(tid => { if(rs.semis.includes(tid)) score += 80; });
-            if (completedSemis) us.finalists.forEach(tid => { if(rs.finalists.includes(tid)) score += 120; });
-            const realRunnerUp = rs.finalists.find(id => id !== real.champion);
-            const userRunnerUp = us.finalists.find(id => id !== player.championId);
-            if(completedFinal && realRunnerUp && userRunnerUp && realRunnerUp === userRunnerUp) score += 180;
-            if (completedFinal && real.champion && player.championId === real.champion) score += 250; 
-            return score;
+            // Condizioni per sblocco bonus (almeno una scelta admin presente per la fase)
+            const completedGroups = Object.keys(ALL_GROUP_FIXTURES).every(g => ALL_GROUP_FIXTURES[g].every(m => !!realMatches[m.id]));
+            const hasS8Results = Object.keys(realMatches).some(k => k.startsWith('S8'));
+            const hasSemisResults = !!realMatches['semi1'] || !!realMatches['semi2'];
+            const hasFinalResults = !!realMatches['final_match'];
+
+            if (completedGroups) us.s8.forEach(tid => { if(rs.s8.includes(tid)) bonusS8 += 50; });
+            if (hasS8Results) us.semis.forEach(tid => { if(rs.semis.includes(tid)) bonusSemis += 80; });
+            if (hasSemisResults) us.finalists.forEach(tid => { if(rs.finalists.includes(tid)) bonusFinalists += 120; });
+            
+            if (hasFinalResults) {
+                const realRunnerUp = rs.finalists.find(id => id !== real.champion);
+                const userRunnerUp = us.finalists.find(id => id !== player.championId);
+                if(realRunnerUp && userRunnerUp && realRunnerUp === userRunnerUp) bonusRunnerUp = 180;
+                if (real.champion && player.championId === real.champion) bonusWinner = 250;
+            }
+
+            return {
+                total: matchPoints + bonusS8 + bonusSemis + bonusFinalists + bonusRunnerUp + bonusWinner,
+                breakdown: { matchPoints, bonusS8, bonusSemis, bonusFinalists, bonusRunnerUp, bonusWinner }
+            };
+        }
+
+        function calculateTotalScore(player, real) {
+            return calculateDetailedScore(player, real).total;
         }
 
         // --- 4. VISTE ---
@@ -519,6 +537,32 @@
                                 </div>
                                 
                                 <div className="flex-grow overflow-y-auto custom-scrollbar pr-4 space-y-8">
+                                    {/* SEZIONE BREAKDOWN PUNTEGGIO */}
+                                    <div className="space-y-4">
+                                        <div className="flex items-center gap-3"><div className="h-px bg-orange-500/30 flex-1"></div><span className="text-[10px] font-black text-orange-500 uppercase tracking-widest italic">Dettaglio Punteggio Fasi</span><div className="h-px bg-orange-500/30 flex-1"></div></div>
+                                        {(() => {
+                                            const score = calculateDetailedScore(detailPlayer, realResults);
+                                            const b = score.breakdown;
+                                            return (
+                                                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                                    {[
+                                                        { label: "Punti Match", val: b.matchPoints },
+                                                        { label: "Bonus Super 8", val: b.bonusS8 },
+                                                        { label: "Bonus Semifinali", val: b.bonusSemis },
+                                                        { label: "Bonus Finalisti", val: b.bonusFinalists },
+                                                        { label: "Bonus Runner-Up", val: b.bonusRunnerUp },
+                                                        { label: "Bonus Vincitore", val: b.bonusWinner }
+                                                    ].map((item, idx) => (
+                                                        <div key={idx} className="bg-white/5 border border-white/10 p-4 rounded-2xl flex flex-col items-center justify-center">
+                                                            <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">{item.label}</span>
+                                                            <span className={`text-xl font-black ${item.val > 0 ? 'text-green-400' : 'text-slate-600'}`}>+{item.val}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            );
+                                        })()}
+                                    </div>
+
                                     <div className="space-y-4">
                                         <div className="flex items-center gap-3"><div className="h-px bg-orange-500/30 flex-1"></div><span className="text-[10px] font-black text-orange-500 uppercase tracking-widest italic">Percorso Qualificazioni</span><div className="h-px bg-orange-500/30 flex-1"></div></div>
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-white/5 p-6 rounded-[2.5rem] border border-white/5">
